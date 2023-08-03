@@ -3398,8 +3398,9 @@ input, select, textarea {
 
 		#banner .inner {
 			margin: 0 auto;
-			margin-left: 5%;
-			width: 55em;
+			padding-left: 5%;
+			max-width: 55em;
+			width: auto;
 		}
 
 		#banner .logo {
