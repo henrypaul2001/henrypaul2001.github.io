@@ -1,5 +1,5 @@
 /*
-	Solid State by HTML5 UP
+	Paradigm Shift by HTML5 UP
 	html5up.net | @ajlkn
 	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
 */
@@ -7,17 +7,17 @@
 (function($) {
 
 	var	$window = $(window),
-		$body = $('body'),
-		$header = $('#header'),
-		$banner = $('#banner');
+		$body = $('body');
 
 	// Breakpoints.
 		breakpoints({
-			xlarge:	'(max-width: 1680px)',
-			large:	'(max-width: 1280px)',
-			medium:	'(max-width: 980px)',
-			small:	'(max-width: 736px)',
-			xsmall:	'(max-width: 480px)'
+			default:   ['1681px',   null       ],
+			xlarge:    ['1281px',   '1680px'   ],
+			large:     ['981px',    '1280px'   ],
+			medium:    ['737px',    '980px'    ],
+			small:     ['481px',    '736px'    ],
+			xsmall:    ['361px',    '480px'    ],
+			xxsmall:   [null,       '360px'    ]
 		});
 
 	// Play initial animations on page load.
@@ -27,119 +27,182 @@
 			}, 100);
 		});
 
-	// Header.
-		if ($banner.length > 0
-		&&	$header.hasClass('alt')) {
+	// Hack: Enable IE workarounds.
+		if (browser.name == 'ie')
+			$body.addClass('is-ie');
 
-			$window.on('resize', function() { $window.trigger('scroll'); });
+	// Mobile?
+		if (browser.mobile)
+			$body.addClass('is-mobile');
 
-			$banner.scrollex({
-				bottom:		$header.outerHeight(),
-				terminate:	function() { $header.removeClass('alt'); },
-				enter:		function() { $header.addClass('alt'); },
-				leave:		function() { $header.removeClass('alt'); }
+	// Scrolly.
+		$('.scrolly')
+			.scrolly({
+				offset: 100
+			});
+
+	// Polyfill: Object fit.
+		if (!browser.canUse('object-fit')) {
+
+			$('.image[data-position]').each(function() {
+
+				var $this = $(this),
+					$img = $this.children('img');
+
+				// Apply img as background.
+					$this
+						.css('background-image', 'url("' + $img.attr('src') + '")')
+						.css('background-position', $this.data('position'))
+						.css('background-size', 'cover')
+						.css('background-repeat', 'no-repeat');
+
+				// Hide img.
+					$img
+						.css('opacity', '0');
+
+			});
+
+			$('.gallery > a').each(function() {
+
+				var $this = $(this),
+					$img = $this.children('img');
+
+				// Apply img as background.
+					$this
+						.css('background-image', 'url("' + $img.attr('src') + '")')
+						.css('background-position', 'center')
+						.css('background-size', 'cover')
+						.css('background-repeat', 'no-repeat');
+
+				// Hide img.
+					$img
+						.css('opacity', '0');
+
 			});
 
 		}
 
-	// Menu.
-		var $menu = $('#menu');
+	// Gallery.
+		$('.gallery')
+			.on('click', 'a', function(event) {
 
-		$menu._locked = false;
+				var $a = $(this),
+					$gallery = $a.parents('.gallery'),
+					$modal = $gallery.children('.modal'),
+					$modalImg = $modal.find('img'),
+					href = $a.attr('href');
 
-		$menu._lock = function() {
+				// Not an image? Bail.
+					if (!href.match(/\.(jpg|gif|png|mp4)$/))
+						return;
 
-			if ($menu._locked)
-				return false;
-
-			$menu._locked = true;
-
-			window.setTimeout(function() {
-				$menu._locked = false;
-			}, 350);
-
-			return true;
-
-		};
-
-		$menu._show = function() {
-
-			if ($menu._lock())
-				$body.addClass('is-menu-visible');
-
-		};
-
-		$menu._hide = function() {
-
-			if ($menu._lock())
-				$body.removeClass('is-menu-visible');
-
-		};
-
-		$menu._toggle = function() {
-
-			if ($menu._lock())
-				$body.toggleClass('is-menu-visible');
-
-		};
-
-		$menu
-			.appendTo($body)
-			.on('click', function(event) {
-
-				event.stopPropagation();
-
-				// Hide.
-					$menu._hide();
-
-			})
-			.find('.inner')
-				.on('click', '.close', function(event) {
-
-					event.preventDefault();
-					event.stopPropagation();
-					event.stopImmediatePropagation();
-
-					// Hide.
-						$menu._hide();
-
-				})
-				.on('click', function(event) {
-					event.stopPropagation();
-				})
-				.on('click', 'a', function(event) {
-
-					var href = $(this).attr('href');
-
+				// Prevent default.
 					event.preventDefault();
 					event.stopPropagation();
 
-					// Hide.
-						$menu._hide();
+				// Locked? Bail.
+					if ($modal[0]._locked)
+						return;
 
-					// Redirect.
-						window.setTimeout(function() {
-							window.location.href = href;
-						}, 350);
+				// Lock.
+					$modal[0]._locked = true;
 
-				});
+				// Set src.
+					$modalImg.attr('src', href);
 
-		$body
-			.on('click', 'a[href="#menu"]', function(event) {
+				// Set visible.
+					$modal.addClass('visible');
 
-				event.stopPropagation();
-				event.preventDefault();
+				// Focus.
+					$modal.focus();
 
-				// Toggle.
-					$menu._toggle();
+				// Delay.
+					setTimeout(function() {
+
+						// Unlock.
+							$modal[0]._locked = false;
+
+					}, 600);
 
 			})
-			.on('keydown', function(event) {
+			.on('click', '.modal', function(event) {
 
-				// Hide on escape.
+				var $modal = $(this),
+					$modalImg = $modal.find('img');
+
+				// Locked? Bail.
+					if ($modal[0]._locked)
+						return;
+
+				// Already hidden? Bail.
+					if (!$modal.hasClass('visible'))
+						return;
+
+				// Stop propagation.
+					event.stopPropagation();
+
+				// Lock.
+					$modal[0]._locked = true;
+
+				// Clear visible, loaded.
+					$modal
+						.removeClass('loaded')
+
+				// Delay.
+					setTimeout(function() {
+
+						$modal
+							.removeClass('visible')
+
+						setTimeout(function() {
+
+							// Clear src.
+								$modalImg.attr('src', '');
+
+							// Unlock.
+								$modal[0]._locked = false;
+
+							// Focus.
+								$body.focus();
+
+						}, 475);
+
+					}, 125);
+
+			})
+			.on('keypress', '.modal', function(event) {
+
+				var $modal = $(this);
+
+				// Escape? Hide modal.
 					if (event.keyCode == 27)
-						$menu._hide();
+						$modal.trigger('click');
 
-			});
+			})
+			.on('mouseup mousedown mousemove', '.modal', function(event) {
+
+				// Stop propagation.
+					event.stopPropagation();
+
+			})
+			.prepend('<div class="modal" tabIndex="-1"><div class="inner"><img src="" /></div></div>')
+				.find('img')
+					.on('load', function(event) {
+
+						var $modalImg = $(this),
+							$modal = $modalImg.parents('.modal');
+
+						setTimeout(function() {
+
+							// No longer visible? Bail.
+								if (!$modal.hasClass('visible'))
+									return;
+
+							// Set loaded.
+								$modal.addClass('loaded');
+
+						}, 275);
+
+					});
 
 })(jQuery);

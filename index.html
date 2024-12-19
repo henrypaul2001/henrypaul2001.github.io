@@ -1,6 +1,6 @@
 <!DOCTYPE HTML>
 <!--
-	Solid State by HTML5 UP
+	Paradigm Shift by HTML5 UP
 	html5up.net | @ajlkn
 	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
 -->
@@ -9,185 +9,164 @@
 		<title>Henry Paul - Portfolio</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<meta name="description" content="" />
+		<meta name="keywords" content="" />
 		<link rel="stylesheet" href="assets/css/main.css" />
-		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
-
-		<style>
-			#banner {
-				background-image: linear-gradient(to top, rgba(46, 49, 65, 0.8), rgba(46, 49, 65, 0.8)), url('./images/bg.JPG');
-				padding: 7em 0 8.25em 0 ;
-				background-color: #2e3141;
-				background-size: auto, cover;
-				background-position: center, center;
-				margin-bottom: -6.5em;
-			}
-
-			body {
-				background-image: linear-gradient(to top, rgba(46, 49, 65, 0.8), rgba(46, 49, 65, 0.8)), url('./images/bg.JPG');
-				background-color: #2e3141;
-				background-size: auto, cover;
-				background-attachment: fixed, fixed;
-				background-position: center, center;
-			}
-
-			#footer {
-				background-color: #2e3141;
-				background-image: linear-gradient(to top, rgba(46, 49, 65, 0.8), rgba(46, 49, 65, 0.8)), url('./images/bg.JPG');
-				background-size: auto, cover;
-				background-position: center, center;
-				margin-top: -6.5em;
-				padding-top: 6.5em;
-			}
-		</style>
 	</head>
 	<body class="is-preload">
 
-		<!-- Page Wrapper -->
-			<div id="page-wrapper">
+		<!-- Wrapper -->
+			<div id="wrapper">
 
-				<!-- Header -->
-					<header id="header" class="alt">
-						<h1><a href="index.html">Henry Paul</a></h1>
-					</header>
-
-				<!-- Banner -->
-					<section id="banner">
-						<div class="inner">
-							<div class="logo"><span class="fas fa-code"></span></div>
-							<h2>Henry Paul - Portfolio</h2>
-							<p>// I am a recent graduate from the University of Hull<br>// I attained a first class degree in Computer Science for Games Development<br>// Below is my work:</p>
+				<!-- Intro -->
+					<section class="intro">
+						<header>
+							<h1 style="font-size: 4em; text-align: left;">Henry Paul - Portfolio</h1>
+							<p>I am a recent graduate from the University of Hull<br>I attained a first class degree in Computer Science for Games Development<br>Below is my work:</p>
+							<ul class="actions">
+								<li><a href="#first" class="arrow scrolly"><span class="label">Next</span></a></li>
+							</ul>
+						</header>
+						<div class="content">
+							<span class="image fill" data-position="center"><img src="images/cornellboxSpheres.png" alt="" /></span>
 						</div>
 					</section>
 
-				<!-- Wrapper -->
-					<section id="wrapper">
+				<!-- Section -->
+					<section id="first">
+						<header>
+							<h2>Paul Engine</h2>
+						</header>
+						<div class="content">
+							<p><strong>A custom game engine</strong> written in C++ using OpenGL. Still currently in active development. Started initialliy as a port of a simple engine built in C# during university,
+								but has since become so much more than that, far surpassing the original version. The engine supports PBR and non PBR materials with both a forward render pipeline and deferred pipeline.
+								I have also built a custom physics system, AI systems, very very very basic UI systems, and skeletal animation systems. Screenshots can be seen on Github.</p>
+							<span class="image main"><img src="images/paulEngine.jpg" alt="Paul Engine Screenshot" /></span>
+							<h3 class="language-headings">C++ | ECS Engine Development | Graphics | Physics | Animation | UI | AI</h3>
+							<a href="https://github.com/henrypaul2001/Paul-Engine" class="button primary large" target="_blank"">View on GitHub</a>
+						</div>
+					</section>
 
-						<!-- One -->
-							<section id="one" class="wrapper spotlight style1">
-								<div class="inner">
-									<a href="https://github.com/henrypaul2001/Paul-Engine" class="image" target="_blank"><img src="images/paulEngineCropped.jpg" alt="" /></a>
-									<div class="content">
-										<h2 class="major">Paul Engine - C++ / OpenGL Game Engine</h2>
-										<p> A custom game engine written in C++ using OpenGL. Still currently in active development. Started initialliy as a port of a simple engine built in C# during university,
-											but has since become so much more than that, far surpassing the original version. The engine supports PBR and non PBR materials with both a forward render pipeline and deferred pipeline.
-											I have also built a custom physics system, AI systems, very very very basic UI systems, and skeletal animation systems. Screenshots can be seen on Github.</p>
-										<a href="https://github.com/henrypaul2001/Paul-Engine" class="special" target="_blank">View on GitHub</a>
-										<h3 class="language-headings">C++ | ECS Engine Development | Graphics | Physics | Animation | UI | AI</h3>
-									</div>
-								</div>
-							</section>
+				<!-- Section -->
+					<section>
+						<header>
+							<h2>GLTrace</h2>
+						</header>
+						<div class="content">
+							<p><strong>An OpenGL, real-time path tracer</strong> built with C++ and compute shaders. Still in development. Scenes can be saved and loaded to and from disk, and edited with the Dear ImGui based editor. Adapted from the popular <strong><a href="https://raytracing.github.io/" target="_blank">"Ray Tracing in One Weekend" book series.</a></strong></p>
 
-						<!-- Two -->
-							<section id="two" class="wrapper alt spotlight style2">
-								<div class="inner">
-									<a href="https://github.com/henrypaul2001/Networking_Library_for_Games_Development" class="image" target="_blank"><img src="images/netlibcropped.JPG" alt="" /></a>
-									<div class="content">
-										<h2 class="major">C# Networking Library for Games Development</h2>
-										<p>An easy to use C# based networking library, designed initially for the MonoGame framework but with the flexibility to be used across various C# based engines, 
-											built to provide beginner game developers the tools required to build networked multiplayer games in peer-to-peer sessions.
-											The library handles synchronisation of game objects, connection handling / management and diagnostic information.
-											All without requiring any experience of networking from the developer.</p>
-										<a href="https://github.com/henrypaul2001/Networking_Library_for_Games_Development" class="special" target="_blank">View on GitHub</a>
-										<h3 class="language-headings">C# | .Net Socket Networking | NUnit Unit Testing</h3>
-									</div>
-								</div>
-							</section>
-
-						<!-- Three -->
-							<section id="three" class="wrapper spotlight style3">
-								<div class="inner">
-									<a href="https://github.com/henrypaul2001/ParticleSimulation_CUDAvsRust" class="image" target="_blank"><img src="images/parallelcropped.JPG" alt="" /></a>
-									<div class="content">
-										<h2 class="major">Multithreaded Particle Simulation - CUDA vs Rust</h2>
-										<p>Two implementations of an aerosol particle simulation. One in CUDA hosted in a C++ application, another in Rust. Both implementations made use of each languages threading capabilities and performance was compared.
-										</p>
-										<a href="https://github.com/henrypaul2001/ParticleSimulation_CUDAvsRust" class="special" target="_blank">View on GitHub</a>
-										<h3 class="language-headings">C++ | CUDA | Rust | Glutin</h3>
-									</div>
-								</div>
-							</section>
-
-						<!-- Four -->
-						<section id="four" class="wrapper alt spotlight style4">
-							<div class="inner">
-								<a href="https://github.com/ReenBean0/Toadm-n" class="image" target="_blank"><img src="images/frogcropped.JPG" alt="" /></a>
-								<div class="content">
-									<h2 class="major">Commercial Games Development Process - Puzzle / Platformer</h2>
-									<p>Development of a game in a team of 4 active members. My role in the team was "Lead Programmer" and was responsible for assigning tasks to other programmers, including myself.
-										I also designed and created the larger scale cave level and its puzzles as well as the menu, UI systems and sound design. We created "Toadm'n", a game in which you guide a toad through a 2D level and solve puzzles
-										by controlling flies to make the toad interact with the environment.
-									</p>
-									<a href="https://github.com/ReenBean0/Toadm-n" class="special" target="_blank">View on GitHub</a>
-									<h3 class="language-headings">C# | Unity | Game / Level Design | Team work</h3>
-								</div>
+							<div class="gallery">
+								<a href="images/demoShotPinkSkyModel.JPG" target="_blank" class="landscape"><img src="images/demoShotPinkSkyModel.JPG" alt="GLTrace Screenshot" /></a>
+								<a href="images/demoscreenshot.JPG" target="_blank" class="landscape"><img src="images/demoscreenshot.JPG" alt="GLTrace Screenshot"/></a>
+								<a href="images/weirdAlienHallway.JPG" target="_blank" class="landscape"><img src="images/weirdAlienHallway.JPG" alt="GLTrace Screenshot"/></a>
 							</div>
-						</section>
-
-						<!-- Five -->
-							<section id="five" class="wrapper style1">
-								<div class="inner">
-									<h2 class="major">Other Projects</h2>
-									<section class="features">
-										<article>
-											<!-- C++ Lab Book -->
-											<a href="https://github.com/henrypaul2001/AdvancedProgramming-LabWork" class="image" target="_blank"><img src="images/c++lab.JPG" alt="" /></a>
-											<h3 class="major">C++ Lab Book</h3>
-											<p>An exploration of C++ as a language and its relationship with memory and the underlying assembly code.</p>
-											<a href="https://github.com/henrypaul2001/AdvancedProgramming-LabWork" class="special" target="_blank">View on GitHub</a>
-											<h3 class="language-headings">C++</h3>
-										</article>
-										<article>
-											<!-- OpenGL -->
-											<a href="https://github.com/henrypaul2001/OpenGL-3D-Graphics" class="image" target="_blank"><img src="images/opengl.JPG" alt="" /></a>
-											<h3 class="major">OpenGL 3D Scene</h3>
-											<p>OpenGL scene demonstrating different lighting techniques and knowledge of vertex buffers / vertex arrays and basic shaders.</p>
-											<a href="https://github.com/henrypaul2001/OpenGL-3D-Graphics" class="special" target="_blank">View on GitHub</a>
-											<h3 class="language-headings">C# | OpenGL</h3>
-										</article>
-										<article>
-											<!-- GLSL -->
-											<a href="https://github.com/henrypaul2001/GLSLShaders" class="image" target="_blank"><img src="images/glsl.JPG" alt="" /></a>
-											<h3 class="major">GLSL Shader Showcase</h3>
-											<p>A more advanced demonstration of shader code using the RenderMonkey application. A scene was created to showcase various rendering techniques such as height mapping and parallax mapping, as well as particle effects.</p>
-											<a href="https://github.com/henrypaul2001/GLSLShaders" class="special" target="_blank">View on GitHub</a>
-											<h3 class="language-headings">GLSL</h3>
-										</article>
-										<article>
-											<!-- AI -->
-											<a href="https://github.com/henrypaul2001/Pathfinding" class="image" target="_blank"><img src="images/ai.JPG" alt="" /></a>
-											<h3 class="major">AI Pathfinding</h3>
-											<p>A showcase of A* and LRTA* pathfinding algorithms, allowing an agent to navigate through multiple maps of varying complexity.</p>
-											<a href="https://github.com/henrypaul2001/Pathfinding" class="special" target="_blank">View on GitHub</a>
-											<h3 class="language-headings">C#</h3>
-										</article>
-										<article>
-											<!-- 2D Graphics -->
-											<a href="https://github.com/henrypaul2001/2DGraphicsAndSimulation" class="image" target="_blank"><img src="images/pong.JPG" alt="" /></a>
-											<h3 class="major">2D Graphics and Physics - A physics showcase and Pong recreation</h3>
-											<p>A physics experimentation demonstrating various collision detections and responses, all including things like mass and velocity between moving objects with the graphics being created using HTML canvas.<br><br>Followed by a recreation of the classic Pong game</p>
-											<a href="https://github.com/henrypaul2001/2DGraphicsAndSimulation" class="special" target="_blank">View on GitHub</a>
-											<a href="Pong/index.html" class="special" target="_blank">Play Pong!</a>
-											<h3 class="language-headings">HTML | JavaScript</h3>
-										</article>
-									</section>
-								</div>
-							</section>
-
-					</section>
-
-				<!-- Footer -->
-					<section id="footer">
-						<div class="inner">
-							<h2 class="major">Get in touch</h2>
-								<p>Email: henrypaul.work@outlook.com</p>
+							<span class="image main"></span>
+							<h3 class="language-headings">C++ | Path tracing | Graphics | UI | OpenGL</h3>
+							<a href="https://github.com/henrypaul2001/GLTrace" class="button primary large" target="_blank"">View on GitHub</a>
 						</div>
 					</section>
 
-			</div>
+				<!-- Section -->
+					<section>
+						<header>
+							<h2>C# Networking Library for Games Development</h2>
+						</header>
+						<div class="content">
+							<p><strong>An easy to use C# based networking library,</strong> designed initially for the MonoGame framework but with the flexibility to be used across various C# based engines, 
+								built to provide beginner game developers the tools required to build networked multiplayer games in peer-to-peer sessions.
+								The library handles synchronisation of game objects, connection handling / management and diagnostic information.
+								All without requiring any experience of networking from the developer.</p>
+							<span class="image main"><img src="images/netlibcropped.JPG" alt="Networking Library Screenshot" /></span>
+							<h3 class="language-headings">C# | .Net Socket Networking | NUnit Unit Testing</h3>
+							<a href="https://github.com/henrypaul2001/Networking_Library_for_Games_Development" class="button primary large" target="_blank"">View on GitHub</a>
+						</div>
+					</section>
+
+				<!-- Section -->
+					<section>
+						<header>
+							<h2>Multithreaded Particle Simulation - CUDA vs Rust</h2>
+						</header>
+						<div class="content">
+							<p><strong>Two implementations of an aerosol particle simulation.</strong> One in CUDA hosted in a C++ application, another in Rust. Both implementations made use of each languages threading capabilities and performance was compared.</p>
+							<span class="image main"><img src="images/parallelcropped.JPG" alt="Particle Simulation Screenshot" /></span>
+							<h3 class="language-headings">C++ | CUDA | Rust</h3>
+							<a href="https://github.com/henrypaul2001/ParticleSimulation_CUDAvsRust" class="button primary large" target="_blank"">View on GitHub</a>
+						</div>
+					</section>
+
+				<!-- Section -->
+					<section>
+						<header>
+							<h2>Commercial Games Development Process - Puzzle / Platformer</h2>
+						</header>
+						<div class="content">
+							<p><strong>Development of a game in a team of 4 active members.</strong> My role in the team was "Lead Programmer" and was responsible for assigning tasks to other programmers, including myself.
+								I also designed and created the larger scale cave level and its puzzles as well as the menu, UI systems and sound design. We created "Toadm'n", a game in which you guide a toad through a 2D level and solve puzzles
+								by controlling flies to make the toad interact with the environment.
+							</p>
+							<span class="image main"><img src="images/frog.JPG" alt="Toadm'n Screenshot" /></span>
+							<h3 class="language-headings">C# | Unity | Game / Level Design | Team work</h3>
+							<a href="https://github.com/ReenBean0/Toadm-n" class="button primary large" target="_blank"">View on GitHub</a>
+						</div>
+					</section>
+				</div>
+				<!-- Section -->
+					<section>
+						<section class="features">
+							<article>
+								<!-- C++ Lab Book -->
+								<a href="https://github.com/henrypaul2001/AdvancedProgramming-LabWork" class="image" target="_blank"><img src="images/c++lab.JPG" alt="" /></a>
+								<h3 class="major">C++ Lab Book</h3>
+								<p>An exploration of C++ as a language and its relationship with memory and the underlying assembly code.</p>
+								<h3 class="language-headings">C++</h3>
+								<a href="https://github.com/henrypaul2001/AdvancedProgramming-LabWork" class="button primary large" target="_blank">View on GitHub</a>
+							</article>
+							<article>
+								<!-- OpenGL -->
+								<a href="https://github.com/henrypaul2001/OpenGL-3D-Graphics" class="image" target="_blank"><img src="images/opengl.JPG" alt="" /></a>
+								<h3 class="major">OpenGL 3D Scene</h3>
+								<p>OpenGL scene demonstrating different lighting techniques and knowledge of vertex buffers / vertex arrays and basic shaders.</p>
+								<h3 class="language-headings">C# | OpenGL</h3>
+								<a href="https://github.com/henrypaul2001/OpenGL-3D-Graphics" class="button primary large" target="_blank">View on GitHub</a>
+							</article>
+							<article>
+								<!-- GLSL -->
+								<a href="https://github.com/henrypaul2001/GLSLShaders" class="image" target="_blank"><img src="images/glsl.JPG" alt="" /></a>
+								<h3 class="major">GLSL Shader Showcase</h3>
+								<p>A more advanced demonstration of shader code using the RenderMonkey application. A scene was created to showcase various rendering techniques such as height mapping and parallax mapping, as well as particle effects.</p>
+								<h3 class="language-headings">GLSL</h3>
+								<a href="https://github.com/henrypaul2001/GLSLShaders" class="button primary large" target="_blank">View on GitHub</a>
+							</article>
+							<article>
+								<!-- AI -->
+								<a href="https://github.com/henrypaul2001/Pathfinding" class="image" target="_blank"><img src="images/ai.JPG" alt="" /></a>
+								<h3 class="major">AI Pathfinding</h3>
+								<p>A showcase of A* and LRTA* pathfinding algorithms, allowing an agent to navigate through multiple maps of varying complexity.</p>
+								<h3 class="language-headings">C#</h3>
+								<a href="https://github.com/henrypaul2001/Pathfinding" class="button primary large" target="_blank">View on GitHub</a>
+							</article>
+							<article>
+								<!-- 2D Graphics -->
+								<a href="https://github.com/henrypaul2001/2DGraphicsAndSimulation" class="image" target="_blank"><img src="images/pong.JPG" alt="" /></a>
+								<h3 class="major">2D Graphics and Physics - A physics showcase and Pong recreation</h3>
+								<p>A physics experimentation demonstrating various collision detections and responses, all including things like mass and velocity between moving objects with the graphics being created using HTML canvas.<br><br>Followed by a recreation of the classic Pong game</p>
+								<h3 class="language-headings">HTML | JavaScript</h3>
+								<a href="https://github.com/henrypaul2001/2DGraphicsAndSimulation" class="button primary large" target="_blank">View on GitHub</a>
+								<a href="Pong/index.html" class="button primary large" target="_blank">Play Pong!</a>
+							</article>
+				</section>
+
+				<!-- Section -->
+				<section class="end">
+					<h2>Get in touch</h2>
+					<h3>Email</h3>
+					<p>henrypaul.work@outlook.com</p>
+				</section>
 
 		<!-- Scripts -->
 			<script src="assets/js/jquery.min.js"></script>
-			<script src="assets/js/jquery.scrollex.min.js"></script>
+			<script src="assets/js/jquery.scrolly.min.js"></script>
 			<script src="assets/js/browser.min.js"></script>
 			<script src="assets/js/breakpoints.min.js"></script>
 			<script src="assets/js/util.js"></script>
