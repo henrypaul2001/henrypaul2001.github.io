@@ -2016,6 +2016,152 @@ input, select, textarea {
 
 		}
 
+/* End */
+.end {
+	display: -moz-flex;
+	display: -webkit-flex;
+	display: -ms-flex;
+	display: flex;
+	-moz-flex-wrap: wrap;
+	-webkit-flex-wrap: wrap;
+	-ms-flex-wrap: wrap;
+	flex-wrap: wrap;
+	margin: 0 0 0 0;
+	background-color: #419887;
+	background-size: auto;
+	display: block;
+}
+
+	.end h2 {
+		color: white;
+		margin: 0em 0em 0.5em 1em;
+		padding: auto;
+	}
+
+	.end h3 {
+		color: white;
+		font-size: 1em;
+		font-weight: 200;
+		letter-spacing: 0.1em;
+		margin: 0.5em 0em 0em 1em;
+		padding: auto;
+	}
+
+	.end p {
+		color: white;
+		font-size: 1em;
+		font-weight: 200;
+		letter-spacing: 0.1em;
+		margin: 0em 0em 0em 1em;
+		padding: auto;
+	}
+
+/* Features */
+
+.features {
+	display: -moz-flex;
+	display: -webkit-flex;
+	display: -ms-flex;
+	display: flex;
+	-moz-flex-wrap: wrap;
+	-webkit-flex-wrap: wrap;
+	-ms-flex-wrap: wrap;
+	flex-wrap: wrap;
+	margin: 0 0 0em 0;
+	background-color: #4aad9a;
+	background-size: auto,
+}
+
+	.features h2 {
+		margin-left: 35%;
+		margin: 1em 10em 1em 0;
+	}
+
+	.features h3 {
+		color: white;
+		font-size: 1em;
+		font-weight: 200;
+		letter-spacing: 0.1em;
+		line-height: 2;
+	}
+
+	.features p {
+		color: white;
+		font-size: 1em;
+		font-weight: 200;
+		letter-spacing: 0.1em;
+		line-height: 2;
+	}
+
+	.features article {
+		padding: 1.75em 1.75em 1.5em 1.75em ;
+		background-color: #1a3731dc;
+		border-radius: 5px;
+		margin: 1.5em 3em 1.5em 1.25em;
+		width: calc(50% - 3.5em);
+
+		grid-area: content;
+		position: relative;
+	}
+
+		.features article:nth-child(2n) {
+			margin-right: 0;
+		}
+
+		.features article .image {
+			border-radius: 5px 5px 0 0;
+			display: block;
+			margin-bottom: 1.75em;
+			margin-left: -1.75em;
+			margin-top: -1.75em;
+			position: relative;
+			width: calc(100% + 3.5em);
+		}
+
+			.features article .image img {
+				border-radius: 5px 5px 0 0;
+				width: 100%;
+			}
+
+	@media screen and (max-width: 980px) {
+
+		.features article {
+			margin: 1em 2em 1em 0;
+			width: calc(50% - 1em);
+		}
+
+	}
+
+	@media screen and (max-width: 736px) {
+
+		.features article {
+			padding: 1.5em 1.5em 0.1em 1.5em ;
+			margin: 0.875em 1.75em 0.875em 0;
+			width: calc(50% - 0.875em - 1px);
+		}
+
+			.features article .image {
+				margin-bottom: 1.5em;
+				margin-left: -1.5em;
+				margin-top: -1.5em;
+				width: calc(100% + 3em);
+			}
+
+	}
+
+	@media screen and (max-width: 480px) {
+
+		.features {
+			display: block;
+		}
+
+			.features article {
+				width: 100%;
+				margin: 0 0 2em 0 !important;
+			}
+
+	}
+
 /* Form */
 
 	form {
