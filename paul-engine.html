@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paul Engine – Henry Paul</title>
+  <link rel="stylesheet" href="assets/css/retro.css" />
+</head>
+<body>
+  <header>
+    <h1>Paul Engine</h1>
+    <p>A custom C++ game engine, currently undergoing complete re-write.</p>
+    <nav>
+      <a href="index.html">← Back to Portfolio</a>
+      <a href="https://github.com/henrypaul2001/Paul-Engine/tree/teardown" target="_blank">GitHub Repo</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>Project Overview</h2>
+      <p><strong>Paul Engine</strong> is my long term personal project. A custom C++ game engine built using OpenGL.
+        It started as a simple C++ port of a C# engine I built during university, but quickly evolved into something 
+        far more complex and ambitious.<br><br>It represents my growth as a programmer and my mindset for learning. From scrappy and experimental beginnings focussed on features, to deliberate architecture and clean code.</p>
+    </section>
+
+    <section>
+      <h2>Timeline & Evolution</h2>
+      <ul>
+        <li><strong>Initial inspiration (Late 2022 - Early 2023):</strong><br>A very basic <a href="https://github.com/henrypaul2001/ECSGameEngineDLL" target="_blank">C# engine</a> built in a university course focussing
+             on ECS design and general game architecture. I remember being disappointed that we built this using C# instead of C++, as it would have been a valuable confidence builder with the C++ language.</li>
+        <li><strong>Starting the project (October 2023):</strong><br>After graduating, I knew I needed more experience with C++ if I wanted to enter the games industry. 
+            So I started a basic port of the C# engine. Since we mainly used C# at university in general, this was the perfect opportunity to push myself into C++.
+            However, I had a lot to learn.</li>
+        <li><strong>Increasing scope (Late 2023 - 2024):</strong><br>The project now far surpassing the original inspiration. Each feature implemented was done so at a higher quality than the last, 
+            showing my C++ skills evolve over time. But it was all being held together by a rotten core. 
+            Those early beginnings. I didn't want to have to add the footnote <i>"don't look too closely at the early stuff"</i> when asked about my work anymore. 
+            <br>Features are great, I was enjoying learning about a variety of different topics. But,
+        for me to feel comfortable showcasing this engine, work needed to be done fixing the core.</li>
+        <li><strong>A short break (Late 2024):</strong><br>After implementing screen space reflections in the engine, I suddenly became fascinated by ray tracing and wondered if it was something I could do.
+        So, I took a break from the game engine and began exploring path tracing with another project: <a href="https://github.com/henrypaul2001/GLTrace" target="_blank">GLTrace</a>
+        </li>
+        <li><strong>ECS Re-write (Early 2025):</strong><br>After the break, I knew it was time to start re-writing this game engine. And so, I started with the entity component system.
+        This is a core element of a modern game engine. My original implementation worked, but it was clunky to use and wasn't very flexible. But the main issue with the original was memory inefficiency.
+        I re-designed the system to be significantly more cache consistent, more flexible and easier to use.
+        </li>
+        <li><strong>Teardown (Early 2025 - Ongoing):</strong><br>I was happy with the ECS re-design. But the core of the engine was still a mess. 
+            Even down to the file structure. Something needed to change. So, I created a new branch in the github repo titled "Teardown" and deleted every single file.
+        <br>I knew I had a monumental task ahead of me. Taking what I learned so far, I set out to rebuild the engine from the ground up.<br>My goal: feature parity, robust architecture.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>The Teardown Branch</h2>
+      <p>Earlier this year, I created a new branch in the project repo called <i>teardown</i>. I deleted everything and started fresh, applying everything I had learned. The goal is to rebuild all the features from the original version but with a much stronger design,
+         as well as some much needed features.
+        <br>This rewrite introduces:</p>
+      <ul>
+        <li>A proper separation between the engine and the game runtime</li>
+        <li>Editor application</li>
+        <li>Graphics API agnostic design</li>
+        <li>Improved file structure</li>
+        <li>Improved memory management</li>
+        <li>Clean application backend</li>
+        <li>Overhauled features</li>
+        <li>Improved asset handling</li>
+        <li>Scene serialization</li>
+        <li>and more... (promise)</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Progress Comparison</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Original</th>
+            <th>Teardown (WIP)</th>
+          </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>ECS</td>
+                <td>✅</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>2D Batch Renderer</td>
+                <td>❌</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>3D Renderer</td>
+                <td>✅</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Forward Render Pipeline</td>
+                <td>✅</td>
+                <td>🔧 In Progress</td>
+            </tr>
+            <tr>
+                <td>Deferred Render Pipeline</td>
+                <td>✅</td>
+                <td>🔧 In Progress</td>
+            </tr>
+            <tr>
+                <td>Advanced Graphics Features</td>
+                <td>✅</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>Editor</td>
+                <td>❌</td>
+                <td>✅ Ongoing</td>
+            </tr>
+            <tr>
+                <td>Runtime</td>
+                <td>❌</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Material System</td>
+                <td>⚠️ Messy</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Mesh System</td>
+                <td>⚠️ Messy</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>Serialization</td>
+                <td>❌</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>GPU API Agnostic</td>
+                <td>❌</td>
+                <td>✅ Ongoing</td>
+            </tr>
+            <tr>
+                <td>Asset Handling</td>
+                <td>⚠️ Messy</td>
+                <td>✅ Ongoing</td>
+            </tr>
+            <tr>
+                <td>2D Physics System</td>
+                <td>❌</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>3D Physics System</td>
+                <td>⚠️ Messy</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>Skeletal Animations</td>
+                <td>✅</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>AI Pathfinding</td>
+                <td>✅</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>Particle System</td>
+                <td>✅</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>Audio System</td>
+                <td>✅</td>
+                <td>❌ Planned</td>
+            </tr>
+            <tr>
+                <td>Runtime UI</td>
+                <td>⚠️ Messy</td>
+                <td>❌ Planned</td>
+            </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Showcase</h2>
+
+      <div class="carousel">
+        <img id="carousel-image" src="images/paulEngine.JPG" alt="Carousel Image">
+        <div id="carousel-caption" class="carousel-caption">Sponza Scene</div>
+        <div class="carousel-controls">
+          <button onclick="prevImage()">&#10094;</button>
+          <button onclick="nextImage()">&#10095;</button>
+        </div>
+      </div>
+
+      <p>Here are some screenshots and gifs from the original version, showing what the engine can do:</p>
+      <!--<img src="images/paulEngine.JPG" alt="Original Paul Engine Screenshot" />
+      <img src="images/cornellboxSpheres.png" alt="Rendering Demo" />-->
+      <!-- Add more as needed -->
+    </section>
+
+    <section>
+      <h2>Links</h2>
+      <ul>
+        <li><a href="https://github.com/henrypaul2001/Paul-Engine" target="_blank">Main GitHub Repository</a></li>
+        <li><a href="https://github.com/henrypaul2001/Paul-Engine/tree/teardown" target="_blank">Teardown Branch (Re-write)</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Made by Henry Paul | <a href="mailto:henrypaul.work@outlook.com">henrypaul.work@outlook.com</a></p>
+  </footer>
+</body>
+</html>
+
+<script>
+    const images = [
+      { src: 'images/paulEngine.JPG', caption: 'Sponza Scene' },
+      { src: 'gifs/pbr.gif', caption: 'PBR Scene' },
+      { src: 'gifs/ssao.gif', caption: 'Screen Space Ambient Occlusion' },
+      { src: 'gifs/ssr.gif', caption: 'Screen Space Reflections' },
+      { src: 'gifs/shadows.gif', caption: 'Real Time Shadowmaps' },
+      { src: 'gifs/postProcessing.gif', caption: 'Post Processing' },
+      { src: 'gifs/ibl1.gif', caption: 'Image Based Lighting' },
+      { src: 'gifs/ibl2.gif', caption: 'Image Based Lighting' },
+      { src: 'gifs/bloom.gif', caption: 'Bloom' },
+      { src: 'gifs/bloomParams.gif', caption: 'Bloom Parameters' }
+    ];
+  
+    let index = 0;
+    const imgElement = document.getElementById('carousel-image');
+    const captionElement = document.getElementById('carousel-caption');
+  
+    let interval = setInterval(nextImage, 5000);
+    
+    function showImage(i) {
+      const nextIndex = (i + images.length) % images.length;
+  
+      imgElement.classList.add('fade-out');
+      setTimeout(() => {
+        imgElement.src = images[nextIndex].src;
+        captionElement.textContent = images[nextIndex].caption;
+        imgElement.classList.remove('fade-out');
+      }, 300);
+  
+      index = nextIndex;
+    }
+  
+    function nextImage() {
+      resetTimer();
+      showImage(index + 1);
+    }
+  
+    function prevImage() {
+      resetTimer();
+      showImage(index - 1);
+    }
+  
+    function resetTimer() {
+        clearInterval(interval);
+        interval = setInterval(nextImage, 5000);
+    }
+  </script>
