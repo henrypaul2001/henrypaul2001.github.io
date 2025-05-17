@@ -187,19 +187,26 @@
     <section>
       <h2>Showcase</h2>
 
-      <div class="carousel">
-        <img id="carousel-image" src="images/paulEngine.JPG" alt="Carousel Image">
-        <div id="carousel-caption" class="carousel-caption">Sponza Scene</div>
+      <h3>Original version:</h3>
+      <div class="carousel" data-carousel="original">
+        <img src="images/paulEngine.JPG" alt="Carousel Image">
+        <div class="carousel-caption">Sponza Scene</div>
         <div class="carousel-controls">
-          <button onclick="prevImage()">&#10094;</button>
-          <button onclick="nextImage()">&#10095;</button>
+          <button>&#10094;</button>
+          <button>&#10095;</button>
         </div>
       </div>
 
-      <p>Here are some screenshots and gifs from the original version, showing what the engine can do:</p>
-      <!--<img src="images/paulEngine.JPG" alt="Original Paul Engine Screenshot" />
-      <img src="images/cornellboxSpheres.png" alt="Rendering Demo" />-->
-      <!-- Add more as needed -->
+      <h3>Teardown version:</h3>
+      <div class="carousel" data-carousel="teardown">
+        <img src="images/paulEngine.JPG" alt="Carousel Image">
+        <div class="carousel-caption">Sponza Scene</div>
+        <div class="carousel-controls">
+          <button>&#10094;</button>
+          <button>&#10095;</button>
+        </div>
+      </div>
+
     </section>
 
     <section>
@@ -218,50 +225,92 @@
 </html>
 
 <script>
-    const images = [
-      { src: 'images/paulEngine.JPG', caption: 'Sponza Scene' },
-      { src: 'gifs/pbr.gif', caption: 'PBR Scene' },
-      { src: 'gifs/ssao.gif', caption: 'Screen Space Ambient Occlusion' },
-      { src: 'gifs/ssr.gif', caption: 'Screen Space Reflections' },
-      { src: 'gifs/shadows.gif', caption: 'Real Time Shadowmaps' },
-      { src: 'gifs/postProcessing.gif', caption: 'Post Processing' },
-      { src: 'gifs/ibl1.gif', caption: 'Image Based Lighting' },
-      { src: 'gifs/ibl2.gif', caption: 'Image Based Lighting' },
-      { src: 'gifs/bloom.gif', caption: 'Bloom' },
-      { src: 'gifs/bloomParams.gif', caption: 'Bloom Parameters' }
-    ];
-  
-    let index = 0;
-    const imgElement = document.getElementById('carousel-image');
-    const captionElement = document.getElementById('carousel-caption');
-  
-    let interval = setInterval(nextImage, 5000);
-    
-    function showImage(i) {
-      const nextIndex = (i + images.length) % images.length;
-  
-      imgElement.classList.add('fade-out');
-      setTimeout(() => {
-        imgElement.src = images[nextIndex].src;
-        captionElement.textContent = images[nextIndex].caption;
-        imgElement.classList.remove('fade-out');
-      }, 300);
-  
-      index = nextIndex;
-    }
-  
-    function nextImage() {
-      resetTimer();
-      showImage(index + 1);
-    }
-  
-    function prevImage() {
-      resetTimer();
-      showImage(index - 1);
-    }
-  
-    function resetTimer() {
-        clearInterval(interval);
-        interval = setInterval(nextImage, 5000);
-    }
-  </script>
+class Carousel {
+  constructor(container, images, delay = 10000) {
+    this.container = container;
+    this.images = images;
+    this.index = 0;
+    this.delay = delay;
+
+    this.imgElement = container.querySelector("img");
+    this.captionElement = container.querySelector(".carousel-caption");
+    this.prevBtn = container.querySelector("button:first-child");
+    this.nextBtn = container.querySelector("button:last-child");
+
+    this.prevBtn.addEventListener("click", () => {
+      this.showImage(this.index - 1);
+      this.resetTimer();
+    });
+
+    this.nextBtn.addEventListener("click", () => {
+      this.showImage(this.index + 1);
+      this.resetTimer();
+    });
+
+    this.interval = setInterval(() => this.nextImage(), this.delay);
+    this.showImage(0);
+  }
+
+  showImage(i) {
+    const nextIndex = (i + this.images.length) % this.images.length;
+    this.imgElement.classList.add("fade-out");
+
+    setTimeout(() => {
+      this.imgElement.src = this.images[nextIndex].src;
+      this.captionElement.textContent = this.images[nextIndex].caption;
+      this.imgElement.classList.remove("fade-out");
+    }, 300);
+
+    this.index = nextIndex;
+  }
+
+  nextImage() {
+    this.showImage(this.index + 1);
+  }
+
+  resetTimer() {
+    clearInterval(this.interval);
+    this.interval = setInterval(() => this.nextImage(), this.delay);
+  }
+}
+
+// Define separate image sets
+const imageSets = {
+  original: [
+    { src: 'images/paulEngine.JPG', caption: 'Sponza Scene' },
+    { src: 'gifs/pbr.gif', caption: 'PBR Scene' },
+    { src: 'gifs/ssao.gif', caption: 'Screen Space Ambient Occlusion' },
+    { src: 'gifs/ssr.gif', caption: 'Screen Space Reflections' },
+    { src: 'gifs/shadows.gif', caption: 'Real Time Shadowmaps' },
+    { src: 'gifs/postProcessing.gif', caption: 'Post Processing' },
+    { src: 'gifs/iblReel.gif', caption: 'Image Based Lighting' },
+    { src: 'gifs/localIBL.gif', caption: 'Local Reflection Probes' },
+    { src: 'gifs/bloom.gif', caption: 'Bloom' },
+    { src: 'gifs/bloomParams.gif', caption: 'Bloom Parameters' },
+    { src: 'gifs/particles.gif', caption: 'Particle System' },
+    { src: 'gifs/animation.gif', caption: 'Skeletal Animations' },
+    { src: 'gifs/physicsBalls.gif', caption: 'Physics Balls' },
+    { src: 'gifs/physicsConstraints.gif', caption: 'Physics Constraints' },
+    { src: 'gifs/aiDemo.gif', caption: 'AI Demo' }
+  ],
+  teardown: [
+    { src: 'gifs/editorSceneSwitching.gif', caption: 'Scene Switching' },
+    { src: 'gifs/editorSceneBuilding.gif', caption: 'Scene Building' },
+    { src: 'gifs/materialEditor.gif', caption: 'Material Builder' },
+    { src: 'gifs/physics2D.gif', caption: 'Box2D Physics' }
+  ]
+};
+
+// Initialize carousels based on data attribute
+document.querySelectorAll('.carousel').forEach(carouselEl => {
+  const key = carouselEl.dataset.carousel;
+  const images = imageSets[key] || [];
+
+  let delay = 10000; // default
+  if (key === 'teardown') delay = 30000; // longer interval for teardown
+
+  if (images.length > 0) {
+    new Carousel(carouselEl, images, delay);
+  }
+});
+</script>
