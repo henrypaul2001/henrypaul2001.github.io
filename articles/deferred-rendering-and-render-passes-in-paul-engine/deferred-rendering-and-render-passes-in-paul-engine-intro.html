@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Deferred Rendering and Render Passes in Paul Engine</title>
+  <link rel="stylesheet" href="../../assets/css/retro.css" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+  <header>
+    <div class="site-title">
+      <h1>Paul Engine</h1>
+    </div>
+    <div class="post-meta">
+      <h2>Progress Report: Deferred Rendering and Render Passes in Paul Engine</h2>
+      <p class="date">Date published: 27/07/2025</p>
+    </div>
+    <nav class="post-nav">
+        <a href="../../paul-engine.html#deferred-rendering">← Back to Project</a>
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-solution.html">Next: Solution →</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <p>
+        This post will go into detail on how I designed the initial implementation of the modular render pass and     frame renderer system in Paul Engine. To evaluate the design, I will be putting it to the test by building a    deferred renderer with it and proposing improvements in various areas.
+      </p>
+    
+      <h3>Intro</h3>
+      <p>
+        Currently, rendering in Paul Engine is limited to an abstract renderer class which can be used to submit meshes for drawing and there is no way to define an actual render pass outside of raw calls to the renderer. A way of defining an independent render pass needed to be set up, so that renderer logic and graphics features can be expanded upon in a clean and efficient way.
+        <br><br>
+        How would we set up rendering logic right now? I guess we could write some code in the main update loop like this:
+      </p>
+
+<pre><code class="language-cpp">
+// Pseudo-code does not represent how the engine and the renderer 
+// is actually architected, just a quick example to give you an 
+// idea of the problem
+void OnUpdate(const Timestep timestep)
+{
+  // Process inputs
+  // ...
+  
+  // Update scene
+  // ...
+  
+  // Render
+  Renderer::BeginScene(m_ActiveCamera);
+  for (Mesh m : m_ActiveScene)
+  {
+    Renderer::SubmitMesh(m);
+  }
+  Renderer::EndScene();
+}
+</code></pre>
+
+      <p>
+      But what if we want to extend this logic into multiple render passes? For example, a simple post processing   pass. Again, we could just write more logic here, maybe even write a function to avoid a messy main loop:
+      </p>
+
+<pre><code class="language-cpp">
+void MainRenderPass()
+{
+  Renderer::BeginScene(m_ActiveCamera);
+  for (Mesh m : m_ActiveScene)
+  {
+    Renderer::SubmitMesh(m);
+  }
+  Renderer::EndScene();
+}
+
+void PostProcessPass()
+{
+  Renderer::BeginScene(nullptr);
+  Renderer::SubmitDefaultQuad(m_ScreenTexture);
+  m_PostProcessShader->Bind();
+  Renderer::EndScene();
+}
+
+void OnUpdate(const Timestep timestep)
+{
+  // Process inputs
+  // ...
+
+  // Update scene
+  // ...
+
+  // Render
+  MainRenderPass();
+  PostProcessPass();
+}
+</code></pre>
+
+      <p>
+      Okay, we've added another render pass to the main loop. But what if the player wants to disable the post  processing effect? Let's add an if statement:
+      </p>
+
+<pre><code class="language-cpp">
+void OnUpdate(const Timestep timestep)
+{
+  // Process inputs
+  // ...
+
+  // Update scene
+  // ...
+
+  // Render
+  MainRenderPass();
+
+  if (PlayerOptions::IsPostProcessingEnabled())
+  {
+    PostProcessPass();
+  }
+}
+</code></pre>
+
+      <p>
+      Problem solved! Or... maybe not. What if we have a long list of <strong><i>potential</i></strong> render  passes   that could be active in a render pipeline?
+      <br><br>
+      First of all, this can get very messy very quickly. Scrolling through a sea of if statements trying to find   the   render pass you're looking for will get annoying fast, and every time you need to extend the render   pipeline you  will wish there was a better way to set this up (trust me).
+      <br>Furthermore, what if a future render pass requires a previous render pass to have been executed? What if  the  hypothetical render pass D should only run if render pass A and B were executed AND render pass C was   not?   You'll find yourself in a nightmare of ghoulish if statement conditions and branches within branches.  What about  inputs? What if the texture used in a render pass needs to be changed? What if we are using  multiple   framebuffers? Where should all of these resources exist? Should the main update loop be aware of  the bloom mip  chain? Should various shadow map textures be passed to the update function?
+      <br><br>
+      Second of all, whilst the condition in the if statement may not be computationally expensive, there may be a    performance impact from the simple existence of the if statement. Modern CPUs can predict the result of a   conditional branch through a built-in optimisation called "branch prediction". Now, it's important to note   that  I said "may". The CPU <i>may</i> be able to predict the branch to take in a code path and it <i>may</i>   create a   notable impact on performance if the prediction is incorrect. This isn't to say that all branches  are evil.   Performance profiling will tell you whether or not a branch is worth worrying about. It's very   likely that a  branch is completely fine for applications outside of extremely high performance fields like   high frequency  trading. In the case of game engines, performance is important, yes. But, there are much  bigger fish to fry in   architecture design optimisations instead of worrying about micro optimsations like  branch prediction, at least   right now (early in development). However, it's important to be aware of and I   personally think it should be  avoided when reasonably possible. For more details on branch prediction, <a  href="https://johnfarrier.com/branch-prediction-the-definitive-guide-for-high-performance-c/"   target="_blank">read this article by John  Farrier.</a>
+      <br><br>
+      Either way, performance impact or not, this is a mess that needs cleaning up.
+      <br><br>
+      If you want an example as to how bad this can get, I can show you the deferred renderer I set up in the old     version of Paul Engine (pre re-write / teardown). Take a look at <a href="https://github.com/henrypaul2001/Paul-Engine/blob/master/CustomGameEngine/DeferredPipeline.cpp" target="_blank">DeferredPipeline.cpp here.</a>
+      <br><br>
+      Whilst it may not look like the <i>worst</i> thing in the world, you'll have to take my word for it when I say that maintaining this thing was a huge headache. Notice all of the raw OpenGL calls, the messy parameters   (why   does the deferred renderer need a collision manager?) and the constant calls into singletons for   various  resources.
+      </p>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+
+  <footer>
+    <nav class="post-nav">
+        <a href="../../paul-engine.html#deferred-rendering">← Back to Project</a>
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-solution.html">Next: Solution →</a>
+    </nav>
+  </footer>
+</body>
+
+
+</html>

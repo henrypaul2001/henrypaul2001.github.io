@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Deferred Rendering and Render Passes in Paul Engine</title>
+  <link rel="stylesheet" href="../../assets/css/retro.css" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+  <header>
+      <div class="site-title">
+      <h1>Paul Engine</h1>
+    </div>
+    <div class="post-meta">
+      <h2>Progress Report: Deferred Rendering and Render Passes in Paul Engine</h2>
+      <p class="date">Date published: 27/07/2025</p>
+    </div>
+    <nav class="post-nav">
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-deferred.html">← Back: Deferred Rendering</a>
+        <a href="../../paul-engine.html#deferred-rendering">Back to Project →</a>
+    </nav>
+  </header>
+  <main>
+    <section>
+      <h4>Profiling</h4>
+      <p>
+        You might have noticed the various calls to PE_PROFILE_FUNCTION() scattered around the code. This is a simple scope timer that can give us an idea as to how long we are spending in each section of the code. I won't lie, I'm not expecting performance to be great here, but let's see how we did. The GPU timings are what is reported when inspecting the frame in RenderDoc, including the time spent in the draw call(s) and other GPU commands contained in the render pass.
+      </p>
+      <p>
+        And before you get upset, these performance figures are in no way meant to represent an actual analysis of which rendering technique is more performant. Furthermore, the deferred renderer used does not actually take advantage of the fact that it can render more dynamic lights and stays within the same limits used in the forward renderer.
+      </p>
+      <h5>Deferred Pipeline</h5>
+      <table>
+        <tr>
+          <th>Render Pass</th>
+          <th>CPU Time Taken (ms)</th>
+          <th>GPU Time Taken (ms)</th>
+        </tr>
+        <tr>
+          <td>Geometry Pass</td>
+          <td>0.583</td>
+          <td>0.79667</td>
+        </tr>
+        <tr>
+          <td>Direct Lighting Pass</td>
+          <td>0.058</td>
+          <td>0.56832</td>
+        </tr>
+        <tr>
+          <td>Indirect Lighting Pass</td>
+          <td>0.098</td>
+          <td>0.18022</td>
+        </tr>
+        <tr>
+          <td>Total</td>
+          <td>0.739</td>
+          <td>1.54521</td>
+        </tr>
+      </table>
+      <p>
+        Zooming in on the geometry pass, 0.279ms was spent in the SubmitMesh scope and 0.280ms was spent in Renderer::EndScene(). I already have some optimisations in mind for the process of submitting meshes in the Renderer class, and I mentioned some ways the described deferred renderer could be taking a performance hit in terms of iterating over a mixed loop of meshes which may or may not be compatible with the renderer. Since implementation performance isn't my main concern right now (focussing mainly on performance impacted by design), this is fine for now.
+      </p>
+      <p>
+        Now let's compare to our forward renderer:
+      </p>
+
+      <h5>Forward Pipeline</h5>
+      <table>
+        <tr>
+          <th>Render Pass</th>
+          <th>CPU Time Taken (ms)</th>
+          <th>GPU Time Taken (ms)</th>
+        </tr>
+        <tr>
+          <td>Scene 3D Pass</td>
+          <td>0.641</td>
+          <td>1.36192</td>
+        </tr>
+      </table>
+
+      <p>
+        Definitely some room for improvement in both of the render pipeline implementations. But how did our FrameRenderer hold up?
+      </p>
+
+      <h5>Frame Renderer</h5>
+      <table>
+        <tr>
+          <th>Function</th>
+          <th>CPU Time Taken (ms)</th>
+        </tr>
+        <tr>
+          <td>RenderFrame (deferred)</td>
+          <td>3.973</td>
+        </tr>
+        <tr>
+          <td>RenderFrame (self time)</td>
+          <td>0.069</td>
+        </tr>
+        <tr>
+          <td>AddRenderPass</td>
+          <td>range(0.001 - 0.004)</td>
+        </tr>
+      </table>
+      <p>
+        In the deferred renderer, the entire RenderFrame took 3.973ms to complete on the CPU. However, most of that time was spent in the render pass logic that we defined. As seen with the "(self time)" variation, 0.069ms was spent in the RenderFrame function itself, meaning that most of the complexity is down to the implementation of the renderer. I did mention before a few optimisations for the RenderFrame function which could help further reduce the 0.069ms spent there.
+      </p>
+
+      <p>
+        With the somewhat grisly performance laid out, it will be interesting to check in on this in the future and see how it compares with an optimised version.
+      </p>
+
+      <p>
+        If you're curious about some of the shaders used, you can see them here:
+      </p>
+
+      <ul>
+          <li>
+          <a href="https://github.com/henrypaul2001/Paul-Engine/blob/teardown/PE-Editor/assets/shaders/Renderer3D_gBuffer.glsl" target="_blank">Blinn-Phong Geometry Pass</a>
+        </li>
+          <li>
+          <a href="https://github.com/henrypaul2001/Paul-Engine/blob/teardown/PE-Editor/assets/shaders/Renderer3D_gBufferPBR.glsl" target="_blank">PBR Geometry Pass</a>
+        </li>
+        <li>
+          <a href="https://github.com/henrypaul2001/Paul-Engine/blob/teardown/PE-Editor/assets/shaders/Renderer3D_DirectLightingPass.glsl" target="_blank">Direct Lighting Pass</a>
+        </li>
+        <li>
+          <a href="https://github.com/henrypaul2001/Paul-Engine/blob/teardown/PE-Editor/assets/shaders/Renderer3D_IndirectLightingPass.glsl" target="_blank">Indirect Lighting Pass</a>
+        </li>
+      </ul>
+
+      <h4>Outro</h4>
+      <p>
+        With all of that said, that marks the end of the first progress report on the development of Paul Engine. This step forward in engine progress was very important, allowing me to begin exploring deeper graphics features such as screen space reflections. As well as opening up the possibility of implementing new render pipelines, like a clustered forward renderer (also known as Forward Plus), in the future.
+      </p>
+
+</section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+
+  <footer>
+    <nav class="post-nav">
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-deferred.html">← Back: Deferred Rendering</a>
+        <a href="../../paul-engine.html#deferred-rendering">Back to Project →</a>
+    </nav>
+  </footer>
+
+</body>
+</html>

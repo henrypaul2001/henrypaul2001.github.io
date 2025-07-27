@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Deferred Rendering and Render Passes in Paul Engine</title>
+  <link rel="stylesheet" href="../../assets/css/retro.css" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+  <header>
+    <div class="site-title">
+      <h1>Paul Engine</h1>
+    </div>
+    <div class="post-meta">
+      <h2>Progress Report: Deferred Rendering and Render Passes in Paul Engine</h2>
+      <p class="date">Date published: 27/07/2025</p>
+    </div>
+    <nav class="post-nav">
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-solution.html">← Back: Solution</a>
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-profiling.html">Next: Profiling →</a>
+    </nav>
+    <nav class="toc">
+      <h4>Contents</h4>
+      <ul>
+        <li><a href="#whatisdeferred">What is deferred rendering?</a></li>
+        <li><a href="#resources">Setting up our resources</a></li>
+        <li><a href="#geometrypass">Geometry Pass</a></li>
+        <li><a href="#beginscene">Why do we need to use Renderer::BeginScene()?</a></li>
+        <li><a href="#geometrypasscont">Geometry Pass Continued</a></li>
+        <li><a href="#directlight">Direct Lighting Pass</a></li>
+        <li><a href="#indirectlight">Indirect Lighting Pass</a></li>
+        <li><a href="#final">Final pipeline</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <section>
+
+      <h3>Deferred Rendering</h3>
+      <p>
+        Now that we have a way to create a render pipeline, it's time to put the render pass system to the test with a deferred renderer. But first...
+      </p>
+
+      <h4 id="whatisdeferred">What is deferred rendering?</h4>
+
+      <p>
+        I won't go in to too much detail, but I'll give an overview of deferred rendering in relation to forward rendering. If you don't know, forward rendering is the process of rendering meshes in sequence and running a full lighting shader for each mesh. Deferred rendering is different in that, when you render the individual meshes, you don't run the lighting shader. Instead, you use a shader built to write values to the "geometry buffer" or "g buffer". These values are usually things like surface normals, positions, material information, etc. After rendering all of the meshes, you run the full lighting shader as a screen space pass, rendering a single quad to the screen. This shader takes the g-buffer textures as input to perform per-pixel lighting calculations.
+        <br><br>
+        There is a performance benefit when doing this due to the fact that we don't waste any time performing lighting calculations on pixels that do not contribute to the final image due to being occluded by other meshes. This allows us to budget for a much higher light count in a scene. As well as this, you can also use the g-buffer textures to add other screen space passes such as screen space ambient occlusion and screen space reflections. In terms of performance, you can go even deeper with deferred rendering to further optimise which lights should contribute to certain pixels through a process called light culling.
+        <br><br>
+        One drawback, however, is the fact that using deferred rendering will actually limit how flexible your material system can be. With the forward renderer in Paul Engine, you can attach any material to an entity and its mesh will be drawn with that materials shader. This shader can be any of the default shaders or something completely custom with a unqiue lighting model or art style. This works because all of the lighting is self contained and everything you need is inside of that custom material, which is associated with the entity. With deferred rendering, the lighting calculations are dependent on the g-buffer which was populated by the geometry pass. How can we accomdate for every possible custom lighting model or set of material inputs? Should we add a g-buffer attachment for every obscure texture type that someone might use in their own lighting function? Where do we draw the line? Furthermore, the lighting is all done in a single draw call. There is no swapping to other shaders to shade specific pixels of the screen and there is no rebinding of material data between meshes.
+        <br><br>
+        The simplest way to solve this problem is to limit the type of materials that can be used in deferred rendering. We define a lighting pass shader that includes a few lighting models and a g-buffer that can provide inputs for any of the possible lighting models. Then, we add an additional forward render pass for everything that couldn't be covered in the deferred render.
+        <br><br>
+        Another possibility is to allow custom lighting models by pushing lighting functions into the lighting pass shader (or just allowing direct access to edit the shader).
+        <br><br>
+        In this example, I will be keeping it simple by setting up a deferred renderer in which all light sources contribute to all pixels. There will be two supported lighting models: Blinn-Phong and a PBR model using Cook-Torrance BRDF. This is also just a prototype and uses experimental render pass logic built for functionality over performance in their current state.
+      </p>
+
+      <h4 id="resources">Setting up our resources</h4>
+
+      <p>
+        The first thing we need to do is set up our g-buffer framebuffer and all of the attachments we will be writing to:
+      </p>
+
+<pre><code class="language-cpp">
+glm::ivec2 viewportRes = { (glm::ivec2)m_ViewportSize };
+
+FramebufferSpecification gBufferSpec;
+gBufferSpec.Width = viewportRes.x;
+gBufferSpec.Height = viewportRes.y;
+gBufferSpec.Samples = 1;
+
+// position
+TextureSpecification positionSpec;
+positionSpec.Width = viewportRes.x;
+positionSpec.Height = viewportRes.y;
+positionSpec.GenerateMips = true;
+positionSpec.Format = ImageFormat::RGB32F;
+positionSpec.MinFilter = ImageMinFilter::NEAREST;
+positionSpec.MagFilter = ImageMagFilter::NEAREST;
+positionSpec.Wrap_S = ImageWrap::CLAMP_TO_BORDER;
+positionSpec.Wrap_T = ImageWrap::CLAMP_TO_BORDER;
+positionSpec.Wrap_R = ImageWrap::CLAMP_TO_BORDER;
+positionSpec.Border = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+Ref&lt;Texture2D&gt; gViewPositionTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, positionSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gViewPosition", false, gViewPositionTexture-&gt;Handle);
+Ref&lt;FramebufferTexture2DAttachment&gt; positionAttachment = FramebufferTexture2DAttachment::Create(FramebufferAttachmentPoint::Colour0, gViewPositionTexture-&gt;Handle);
+</code></pre>
+
+      <p>
+        As you can see, we first define a texture specification for the view space position buffer. Following this, we define the rest of the attachments that can be seen below:
+      </p>
+
+<pre><code class="language-cpp">
+// normal
+// ...
+Ref&lt;Texture2D&gt; gNormalTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, normalSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gNormal", false, gNormalTexture-&gt;Handle);
+// ...
+
+// albedo
+// ...
+Ref&lt;Texture2D&gt; gAlbedoTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, albedoSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gAlbedo", false, gAlbedoTexture-&gt;Handle);
+// ...
+
+// specular
+// ...
+Ref&lt;Texture2D&gt; gSpecularTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, specularSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gSpecular", false, gSpecularTexture-&gt;Handle);
+// ...
+
+// arm (ambient occlusion, roughness, metalness)
+// ...
+Ref&lt;Texture2D&gt; gARMTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, armSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gARM", false, gARMTexture-&gt;Handle);
+// ...
+
+// emission
+// ...
+Ref&lt;Texture2D&gt; gEmissionTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, emissionSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gEmission", false, gEmissionTexture-&gt;Handle);
+// ...
+
+// metadata (entityID, lightingModel)
+// ...
+metadataSpec.Format = ImageFormat::RG32F;
+Ref&lt;Texture2D&gt; gMetadataTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, metadataSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("gMetadata", false, gMetadataTexture-&gt;Handle);
+// ...
+
+// depth
+// ...
+depthSpec.Format = ImageFormat::Depth24Stencil8;
+Ref&lt;FramebufferTexture2DAttachment&gt; depthAttach = FramebufferTexture2DAttachment::Create(FramebufferAttachmentPoint::DepthStencil, depthSpec, true);
+</code></pre>
+
+      <p>
+        Finally, we create the geometry framebuffer:
+      </p>
+
+<pre><code class="language-cpp"></code>
+Ref&lt;Framebuffer&gt; gBuffer = Framebuffer::Create(gBufferSpec, { positionAttachment, normalAttachment, albedoAttachment, specularAttachment, armAttachment, emissionAttachment, metadataAttachment }, depthAttach);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("gBuffer", false, gBuffer);
+</code></pre>
+
+      <p>
+        The next section calls existing functions for setting up some more resources. These resources are identical to the ones found in the original forward renderer, so they can be re-used here:
+      </p>
+
+<pre><code class="language-cpp"></code>
+Ref&lt;Framebuffer&gt; mainFramebuffer = InitMainFramebuffer(out_Framerenderer);
+std::vector&lt;Ref&lt;Framebuffer&gt;&gt; dirSpotPointShadowFBOs = InitShadowMapping(out_Framerenderer);
+InitEditorData(out_Framerenderer);
+Ref&lt;Framebuffer&gt; bloomFBO = InitBloom(out_Framerenderer);
+InitTonemapping(out_Framerenderer);
+InitEnvMapAndSkybox(out_Framerenderer);
+</code></pre>
+
+      <p>
+        If you'd like to take a look at these functions, expand any of the following headers:
+      </p>
+
+<details>
+  <summary>InitMainFramebuffer()</summary>
+  <p>Creates the main rendering framebuffer that will be used to display the main viewport. Includes an alternate screen attachment which allows this framebuffer to be used as a ping-pong framebuffer.</p>
+<pre><code class="language-cpp"></code>
+glm::ivec2 viewportRes = { (glm::ivec2)m_ViewportSize };
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;&gt;("ViewportResolution", false, viewportRes);
+
+FramebufferSpecification spec;
+spec.Width = viewportRes.x;
+spec.Height = viewportRes.y;
+spec.Samples = 1;
+
+TextureSpecification screenSpec;
+screenSpec.Width = viewportRes.x;
+screenSpec.Height = viewportRes.y;
+screenSpec.GenerateMips = false;
+screenSpec.Format = ImageFormat::RGBA16F;
+screenSpec.MinFilter = ImageMinFilter::NEAREST;
+screenSpec.MagFilter = ImageMagFilter::NEAREST;
+screenSpec.Wrap_S = ImageWrap::CLAMP_TO_BORDER;
+screenSpec.Wrap_T = ImageWrap::CLAMP_TO_BORDER;
+screenSpec.Wrap_R = ImageWrap::CLAMP_TO_BORDER;
+screenSpec.Border = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+Ref&lt;Texture2D&gt; screenTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, screenSpec);
+Ref&lt;Texture2D&gt; alternateScreenTexture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, screenSpec);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("ScreenTexture", false, screenTexture-&gt;Handle);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("AlternateScreenTexture", false, alternateScreenTexture-&gt;Handle);
+
+Ref&lt;FramebufferTexture2DAttachment&gt; screenAttachment = FramebufferTexture2DAttachment::Create(FramebufferAttachmentPoint::Colour0, screenTexture-&gt;Handle);
+
+screenSpec.Format = ImageFormat::RED_INTEGER;
+Ref&lt;FramebufferTexture2DAttachment&gt; entityIDAttach = FramebufferTexture2DAttachment::Create(FramebufferAttachmentPoint::Colour1, screenSpec, true);
+
+screenSpec.Format = ImageFormat::Depth24Stencil8;
+Ref&lt;FramebufferTexture2DAttachment&gt; depthAttach = FramebufferTexture2DAttachment::Create(FramebufferAttachmentPoint::DepthStencil, screenSpec, true);
+
+Ref&lt;Framebuffer&gt; mainFramebuffer = Framebuffer::Create(spec, { screenAttachment, entityIDAttach }, depthAttach);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("MainFramebuffer", false, mainFramebuffer);
+
+return mainFramebuffer;
+</code></pre>
+</details>
+
+<details>
+  <summary>InitShadowMapping()</summary>
+  <p>Create shadow map arrays for directional, point and spot light sources as well as importing the appropriate shader files and creating shadow framebuffers.</p>
+<pre><code class="language-cpp"></code>
+Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
+std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
+
+TextureSpecification depthSpec;
+depthSpec.Border = glm::vec4(1.0f);
+depthSpec.Width = m_ShadowWidth;
+depthSpec.Height = m_ShadowHeight;
+depthSpec.MinFilter = ImageMinFilter::NEAREST;
+depthSpec.MagFilter = ImageMagFilter::NEAREST;
+depthSpec.Wrap_S = ImageWrap::CLAMP_TO_BORDER;
+depthSpec.Wrap_T = ImageWrap::CLAMP_TO_BORDER;
+depthSpec.Wrap_R = ImageWrap::CLAMP_TO_BORDER;
+depthSpec.Format = ImageFormat::Depth32;
+
+Ref&lt;Texture2DArray&gt; dirLightShadowArray = AssetManager::CreateAsset&lt;Texture2DArray&gt;(true, depthSpec, std::vector&lt;Buffer&gt;(Renderer::MAX_ACTIVE_DIR_LIGHTS));
+Ref&lt;Texture2DArray&gt; spotLightShadowArray = AssetManager::CreateAsset&lt;Texture2DArray&gt;(true, depthSpec, std::vector&lt;Buffer&gt;(Renderer::MAX_ACTIVE_SPOT_LIGHTS));
+Ref&lt;TextureCubemapArray&gt; pointLightShadowArray = AssetManager::CreateAsset&lt;TextureCubemapArray&gt;(true, depthSpec, std::vector&lt;std::vector&lt;Buffer&gt;&gt;(Renderer::MAX_ACTIVE_SPOT_LIGHTS, std::vector&lt;Buffer&gt;(6)));
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("DirLightShadowMap", false, dirLightShadowArray-&gt;Handle);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("SpotLightShadowMap", false, spotLightShadowArray-&gt;Handle);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("PointLightShadowMap", false, pointLightShadowArray-&gt;Handle);
+
+// In the future, this should be serialized. But many of the existing resources such as shadow framebuffers and textures aren't suited for this value to change during runtime
+glm::ivec2 shadowRes = { m_ShadowWidth, m_ShadowHeight };
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;&gt;("ShadowResolution", false, shadowRes);
+
+// Framebuffers
+FramebufferSpecification shadowFBOSpec;
+shadowFBOSpec.Width = m_ShadowWidth;
+shadowFBOSpec.Height = m_ShadowHeight;
+shadowFBOSpec.Samples = 1;
+
+Ref&lt;FramebufferTexture2DArrayAttachment&gt; dirLightShadowDepthArrayAttach = FramebufferTexture2DArrayAttachment::Create(FramebufferAttachmentPoint::Depth, dirLightShadowArray-&gt;Handle);
+Ref&lt;Framebuffer&gt; dirLightShadowsFramebuffer = Framebuffer::Create(shadowFBOSpec, {}, dirLightShadowDepthArrayAttach);
+
+Ref&lt;FramebufferTexture2DArrayAttachment&gt; spotLightShadowDepthArrayAttach = FramebufferTexture2DArrayAttachment::Create(FramebufferAttachmentPoint::Depth, spotLightShadowArray-&gt;Handle);
+Ref&lt;Framebuffer&gt; spotLightShadowsFramebuffer = Framebuffer::Create(shadowFBOSpec, {}, spotLightShadowDepthArrayAttach);
+
+Ref&lt;FramebufferTextureCubemapArrayAttachment&gt; pointLightShadowDepthAttach = FramebufferTextureCubemapArrayAttachment::Create(FramebufferAttachmentPoint::Depth, pointLightShadowArray-&gt;Handle);
+Ref&lt;Framebuffer&gt; pointLightShadowsFramebuffer = Framebuffer::Create(shadowFBOSpec, {}, pointLightShadowDepthAttach);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("DirLightFramebuffer", false, dirLightShadowsFramebuffer);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("SpotLightFramebuffer", false, spotLightShadowsFramebuffer);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("PointLightFramebuffer", false, pointLightShadowsFramebuffer);
+
+AssetHandle shadowmapShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/DepthShader.glsl", true);
+Ref&lt;Material&gt; shadowmapMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, shadowmapShaderHandle);
+
+AssetHandle shadowmapCubeShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/DepthShaderCube.glsl", true);
+Ref&lt;Material&gt; shadowmapCubeMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, shadowmapCubeShaderHandle);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("ShadowmapMaterial", false, shadowmapMaterial-&gt;Handle);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("ShadowmapCubeMaterial", false, shadowmapCubeMaterial-&gt;Handle);
+
+return { dirLightShadowsFramebuffer, spotLightShadowsFramebuffer, pointLightShadowsFramebuffer };
+</code></pre>
+</details>
+
+<details>
+  <summary>InitEditorData()</summary>
+  <p>Create a few values related to the debug views in the editor. Note how most of these are serialized, allowing them to be changed in the editor.</p>
+<pre><code class="language-cpp"></code>
+bool showColliders = true;
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;bool&gt;&gt;("ShowColliders", true, showColliders);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;Entity&gt;&gt;("SelectedEntity", false, Entity());
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;float&gt;&gt;("OutlineThickness", true, m_EntityOutlineThickness);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;glm::vec4&gt;&gt;("OutlineColour", true, m_EntityOutlineColour);
+</code></pre>
+</details>
+
+<details>
+  <summary>InitBloom()</summary>
+  <p>Create all of the resources needed for the mip chain bloom render passes. Earlier in this post I mentioned how custom data types can be used in RenderComponentPrimitiveType templates and cited an example as the BloomMipChain type. This is where that example is used. The mip chain data type was intended to just be a quick and easy way to keep all of the textures together and how they should be sized.</p>
+
+<pre><code class="language-cpp"></code>
+struct BloomMipChain
+{
+  void Init(const glm::ivec2 viewportSize, const uint8_t chainLength = 6)
+  {
+    TextureSpecification mipSpec;
+    mipSpec.Format = ImageFormat::R11FG11FB10F;
+    mipSpec.MinFilter = ImageMinFilter::LINEAR;
+    mipSpec.MagFilter = ImageMagFilter::LINEAR;
+    mipSpec.Wrap_S = ImageWrap::CLAMP_TO_EDGE;
+    mipSpec.Wrap_T = ImageWrap::CLAMP_TO_EDGE;
+    mipSpec.GenerateMips = false;
+
+    m_Chain.clear();
+    m_Chain.reserve(chainLength);
+    glm::vec2 mipSize = viewportSize;
+    for (uint8_t i = 0; i &lt; chainLength; i++)
+    {
+      mipSize *= 0.5f;
+      mipSize = glm::max(mipSize, glm::vec2(1.0f, 1.0f));
+
+      mipSpec.Width = (uint32_t)mipSize.x;
+      mipSpec.Height = (uint32_t)mipSize.y;
+
+      Ref&lt;Texture2D&gt; texture = AssetManager::CreateAsset&lt;Texture2D&gt;(true, mipSpec);
+      m_Chain.push_back(texture-&gt;Handle);
+    }
+  }
+
+  void Resize(const glm::ivec2 viewportSize)
+  {
+    glm::vec2 mipSize = viewportSize;
+    for (uint8_t i = 0; i &lt; m_Chain.size(); i++)
+    {
+      mipSize *= 0.5f;
+      mipSize = glm::max(mipSize, glm::vec2(1.0f, 1.0f));
+      AssetManager::GetAsset&lt;Texture2D&gt;(m_Chain[i])-&gt;Resize(mipSize.x, mipSize.y);
+    }
+  }
+
+  size_t Size() const { return m_Chain.size(); }
+
+  Ref&lt;Texture2D&gt; GetMipLevel(uint8_t mip) {
+    PE_CORE_ASSERT(mip &lt; m_Chain.size(), "Index out of bounds. Index: {0}, Size: {1}", mip, m_Chain.size());
+    return AssetManager::GetAsset&lt;Texture2D&gt;(m_Chain[mip]);
+  }
+
+  AssetHandle GetMipHandle(uint8_t mip) {
+    PE_CORE_ASSERT(mip &lt; m_Chain.size(), "Index out of bounds. Index: {0}, Size: {1}", mip, m_Chain.size());
+    return m_Chain[mip];
+  }
+
+private:
+  std::vector&lt;AssetHandle&gt; m_Chain;
+};
+</code></pre>
+
+<p>
+  The reason the BloomMipChain doesn't use a single texture with actual mipmaps is simply because mipmap generation wasn't actually set up yet in the engine. If I had to guess, writing to mipmaps would probably be more efficient in comparison to fetching and writing to completely unique textures representing different mip levels. This is because, on the CPU side, it requires multiple calls into the asset manager to get texture assets for each mip. And, on the GPU side, I would imagine that the efficiency of the allocated memory would be better when using mips instead of separate textures due to the fact that it would be allocated as a continous block of memory instead of potentially being allocated in fragmented locations.
+</p>
+
+<pre><code class="language-cpp"></code>
+Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
+std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
+
+float bloomThreshold = 1.0f;
+float bloomSoftThreshold = 0.5f;
+float filterRadius = 0.005f;
+
+float bloomStrength = 0.04f;
+float dirtMaskStrength = 0.5f;
+bool useDirtMask = true;
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;float&gt;&gt;("BloomThreshold", true, bloomThreshold);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;float&gt;&gt;("BloomSoftThreshold", true, bloomSoftThreshold);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;float&gt;&gt;("BloomFilterRadius", true, filterRadius);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;float&gt;&gt;("BloomStrength", true, bloomStrength);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;float&gt;&gt;("BloomDirtMaskStrength", true, dirtMaskStrength);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;bool&gt;&gt;("UseDirtMask", true, useDirtMask);
+
+// Bloom mip chain
+// ---------------
+BloomMipChain bloomMipChain;
+bloomMipChain.Init(m_ViewportSize, 6);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;BloomMipChain&gt;&gt;("BloomMipChain", false, bloomMipChain);
+
+// Framebuffers
+// ------------
+
+FramebufferSpecification bloomSpec;
+bloomSpec.Width = m_ViewportSize.x;
+bloomSpec.Height = m_ViewportSize.y;
+Ref&lt;FramebufferTexture2DAttachment&gt; bloomColourAttachment = FramebufferTexture2DAttachment::Create(FramebufferAttachmentPoint::Colour0, bloomMipChain.GetMipLevel(0)-&gt;Handle);
+Ref&lt;Framebuffer&gt; bloomFBO = Framebuffer::Create(bloomSpec, { bloomColourAttachment });
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("BloomFramebuffer", false, bloomFBO);
+
+AssetHandle bloomDownsampleShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/MipChainDownsample.glsl", true);
+Ref&lt;Material&gt; mipchainDownsampleMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, bloomDownsampleShaderHandle);
+
+AssetHandle bloomUpsampleShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/MipChainUpsample.glsl", true);
+Ref&lt;Material&gt; mipchainUpsampleMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, bloomUpsampleShaderHandle);
+
+AssetHandle bloomCombineShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/MipChainBloomCombine.glsl", true);
+Ref&lt;Material&gt; bloomCombineMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, bloomCombineShaderHandle);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("MipChainDownsampleMaterial", false, mipchainDownsampleMaterial-&gt;Handle);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("MipChainUpsampleMaterial", false, mipchainUpsampleMaterial-&gt;Handle);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("BloomCombineMaterial", false, bloomCombineMaterial-&gt;Handle);
+
+// Textures
+// --------
+AssetHandle dirtMaskTextureHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "textures/dirtmask.jpg", true);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("DirtMaskTexture", true, dirtMaskTextureHandle);
+
+return bloomFBO;
+</code></pre>
+</details>
+
+<details>
+  <summary>InitTonemapping()</summary>
+  <p>Simple function to create the tonemapping material.</p>
+<pre><code class="language-cpp"></code>
+Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
+std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
+
+AssetHandle gammaTonemapShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/GammaTonemap.glsl", true);
+Ref&lt;Material&gt; gammaTonemapMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, gammaTonemapShaderHandle);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("GammaTonemapMaterial", false, gammaTonemapMaterial-&gt;Handle);
+</code></pre>
+</details>
+
+<details>
+  <summary>InitEnvMapAndSkybox()</summary>
+  <p>Import default skybox assets and material.</p>
+<pre><code class="language-cpp"></code>
+Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
+std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
+
+AssetHandle skyboxShaderHandle = assetManager->ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/Skybox.glsl", true);
+Ref&lt;Material&gt; skyboxMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, skyboxShaderHandle);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("SkyboxMaterial", false, skyboxMaterial-&gt;Handle);
+
+// Create skybox cubemap texture from individual faces
+// TODO: cubemap asset as a single file (probably another custom file format similar to binary texture array file)
+std::vector&lt;std::filesystem::path&gt; facePaths = {
+  "assets/textures/cubemap/default_skybox/right.png",
+  "assets/textures/cubemap/default_skybox/left.png",
+  "assets/textures/cubemap/default_skybox/top.png",
+  "assets/textures/cubemap/default_skybox/bottom.png",
+  "assets/textures/cubemap/default_skybox/front.png",
+  "assets/textures/cubemap/default_skybox/back.png"
+};
+
+std::vector&lt;Buffer&gt; faceData;
+faceData.reserve(6);
+for (int i = 0; i &lt; 6; i++)
+{
+  TextureImporter::ImageFileReadResult result;
+  faceData.push_back(TextureImporter::ReadImageFile(facePaths[i], result, false));
+}
+
+TextureSpecification skyboxSpec;
+skyboxSpec.Format = ImageFormat::RGB8;
+skyboxSpec.MinFilter = ImageMinFilter::LINEAR;
+skyboxSpec.MagFilter = ImageMagFilter::LINEAR;
+skyboxSpec.Wrap_S = ImageWrap::CLAMP_TO_EDGE;
+skyboxSpec.Wrap_T = ImageWrap::CLAMP_TO_EDGE;
+skyboxSpec.Wrap_R = ImageWrap::CLAMP_TO_EDGE;
+skyboxSpec.Width = 2048;
+skyboxSpec.Height = 2048;
+Ref&lt;TextureCubemap&gt; skyboxCubemap = AssetManager::CreateAsset&lt;TextureCubemap&gt;(true, skyboxSpec, faceData);
+skyboxMaterial-&gt;GetParameter&lt;SamplerCubeShaderParameterTypeStorage&gt;("Skybox")-&gt;TextureHandle = skyboxCubemap-&gt;Handle;
+
+AssetHandle envMapHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "textures/environment/default_environment.hdr", false);
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentEnvironmentMap&gt;("EnvironmentMap", true, envMapHandle);
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("SkyboxTexture", true, skyboxCubemap-&gt;Handle);
+</code></pre>
+</details>
+
+        <p>
+          Now that we have some general resources imported and added to the renderer, we create an event function. Right now, the only event that this function listens to is the viewport resize event so that we can resize the appropriate textures and framebuffers:
+        </p>
+
+<pre><code class="language-cpp"></code>
+// ...
+
+FrameRenderer::OnEventFunc eventFunc = [](Event&amp; e, FrameRenderer* self)
+{
+  EventDispatcher dispatcher = EventDispatcher(e);
+  dispatcher.DispatchEvent&lt;MainViewportResizeEvent&gt;([self](MainViewportResizeEvent&amp; e)->bool {
+    glm::ivec2 viewportSize = glm::ivec2(e.GetWidth(), e.GetHeight());
+    self-&gt;GetRenderResource&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;&gt;("ViewportResolution")-&gt;Data = viewportSize;
+    self-&gt;GetRenderResource&lt;RenderComponentFramebuffer&gt;("MainFramebuffer")-&gt;Framebuffer-&gt;Resize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+    self-&gt;GetRenderResource&lt;RenderComponentFramebuffer&gt;("gBuffer")-&gt;Framebuffer-&gt;Resize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+    AssetManager::GetAsset&lt;Texture2D&gt;(self-&gt;GetRenderResource&lt;RenderComponentTexture&gt;("ScreenTexture")-&gt;TextureHandle)-&gt;Resize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+    AssetManager::GetAsset&lt;Texture2D&gt;(self-&gt;GetRenderResource&lt;RenderComponentTexture&gt;("AlternateScreenTexture")-&gt;TextureHandle)-&gt;Resize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+    self-&gt;GetRenderResource&lt;RenderComponentPrimitiveType&lt;BloomMipChain&gt;&gt;("BloomMipChain")-&gt;Data.Resize(viewportSize);
+    self-&gt;GetRenderResource&lt;RenderComponentFramebuffer&gt;("BloomFramebuffer")-&gt;Framebuffer-&gt;Resize(viewportSize.x, viewportSize.y);
+    self-&gt;GetRenderResource&lt;RenderComponentFramebuffer&gt;("Texture_FBO")-&gt;Framebuffer-&gt;Resize(viewportSize.x, viewportSize.y);
+
+    AssetManager::GetAsset&lt;Texture2D&gt;(self-&gt;GetRenderResource&lt;RenderComponentTexture&gt;("SSAO_Texture")-&gt;TextureHandle)-&gt;Resize(viewportSize.x, viewportSize.y);
+    AssetManager::GetAsset&lt;Texture2D>(self-&gt;GetRenderResource&lt;RenderComponentTexture&gt;("SSAO_BlurTexture")-&gt;TextureHandle)-&gt;Resize(viewportSize.x, viewportSize.y);
+
+    AssetManager::GetAsset&lt;Texture2D&gt;(self-&gt;GetRenderResource&lt;RenderComponentTexture&gt;("SSRUV_Texture")-&gt;TextureHandle)-&gt;Resize(viewportSize.x, viewportSize.y);
+
+    return false;
+  });
+};
+out_Framerenderer-&gt;SetEventFunc(eventFunc);
+
+// ...
+</code></pre>
+
+        <p>
+          The next step is to import our lighting pass shader and bind the correct g-buffer textures to the material:
+        </p>
+
+<pre><code class="language-cpp"></code>
+// ...
+
+AssetHandle directLightingPassShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/Renderer3D_DirectLightingPass.glsl", true);
+Ref&lt;Material&gt; directLightingPassMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, directLightingPassShaderHandle);
+
+// Set gBuffer textures in lighting pass material
+Sampler2DShaderParameterTypeStorage* pos = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gViewPosition");
+Sampler2DShaderParameterTypeStorage* normal = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gWorldNormal");
+Sampler2DShaderParameterTypeStorage* albedo = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gAlbedo");
+Sampler2DShaderParameterTypeStorage* specular = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gSpecular");
+Sampler2DShaderParameterTypeStorage* arm = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gARM");
+Sampler2DShaderParameterTypeStorage* emission = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gEmission");
+Sampler2DShaderParameterTypeStorage* meta = directLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gMetadata");
+
+if (pos) { pos-&gt;TextureHandle = gViewPositionTexture-&gt;Handle; }
+if (normal) { normal-&gt;TextureHandle = gNormalTexture-&gt;Handle; }
+if (albedo) { albedo-&gt;TextureHandle = gAlbedoTexture-&gt;Handle; }
+if (specular) { specular-&gt;TextureHandle = gSpecularTexture-&gt;Handle; }
+if (arm) { arm-&gt;TextureHandle = gARMTexture-&gt;Handle; }
+if (emission) { emission-&gt;TextureHandle = gEmissionTexture-&gt;Handle; }
+if (meta) { meta-&gt;TextureHandle = gMetadataTexture-&gt;Handle; }
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("DirectLightingPass", false, directLightingPassMaterial-&gt;Handle);
+
+// ...
+</code></pre>
+
+        <p>
+          We then set up more resources for our additional screen space passes. This includes the materials and parameters for screen space ambient occlusion and screen space reflections. These render passes will be used in the IndirectLightingPass shader which can be seen imported here:
+        </p>
+
+<pre><code class="language-cpp"></code>
+// ...
+
+// code for SSAO and SSR resources
+
+AssetHandle indirectLightingPassShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/Renderer3D_IndirectLightingPass.glsl", true);
+Ref&lt;Material&gt; indirectLightingPassMaterial = AssetManager::CreateAsset&lt;Material&gt;(true, indirectLightingPassShaderHandle);
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gViewPosition")-&gt;TextureHandle = gViewPositionTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gWorldNormal")-&gt;TextureHandle = gNormalTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gAlbedo")-&gt;TextureHandle = gAlbedoTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gSpecular")-&gt;TextureHandle = gSpecularTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gARM")-&gt;TextureHandle = gARMTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("gMetadata")-&gt;TextureHandle = gMetadataTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("DirectLightingPass")-&gt;TextureHandle = out_Framerenderer-&gt;GetRenderResource&lt;RenderComponentTexture&gt;("ScreenTexture")-&gt;TextureHandle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("SSRUVMap")-&gt;TextureHandle = ssrUVTexture-&gt;Handle;
+indirectLightingPassMaterial-&gt;GetParameter&lt;Sampler2DShaderParameterTypeStorage&gt;("SSAOMap")-&gt;TextureHandle = ssaoBlurTexture-&gt;Handle;
+
+out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("IndirectLightingPass", false, indirectLightingPassMaterial-&gt;Handle);
+
+// ...
+</code></pre>
+
+<p>
+  That covers the important resources we will be using in the deferred renderer. Now it's time to define some render passes and add them to the frame renderer. For the sake of brevity, I won't be going into full detail for some of the render passes. The focus will be mainly on the geometry pass and the lighting passes.
+</p>
+
+<h4 id="geometrypass">Geometry Pass</h4>
+<p>
+  Let's begin by defining our render function:
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  // ...
+};
+</code></pre>
+
+<p>
+  The first thing I want to do is clear the framebuffer and make sure the rendering viewport is correct. But to do so, we need our first input: the viewport resolution resource. So now let's define our input specification:
+</p>
+
+<pre><code class="language-cpp"></code>
+std::vector&lt;RenderComponentType&gt; geometryPassInputSpec = { RenderComponentType::PrimitiveType };
+</code></pre>
+
+<p>
+  And then, our input binding:
+</p>
+
+<pre><code class="language-cpp"></code>
+std::vector&lt;std::string&gt; geometryPassInputBindings = { "ViewportResolution" };
+</code></pre>
+
+<p>
+  With this input set up, we need to cast our first input into the expected type:
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  PE_PROFILE_SCOPE("Geometry Pass");
+  Ref&lt;Scene&gt;&amp; sceneContext = context.ActiveScene;
+  Ref&lt;Camera&gt; activeCamera = context.ActiveCamera;
+  const glm::mat4& cameraWorldTransform = context.CameraWorldTransform;
+  PE_CORE_ASSERT(inputs[0], "Viewport resolution input required");
+  RenderComponentPrimitiveType&lt;glm::ivec2&gt;* viewportResInput = dynamic_cast&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;*&gt;(inputs[0]);
+
+  // ...
+};
+</code></pre>
+
+<p>
+  I added an assertion to make sure that the input exists before attemping to downcast it. The process of downcasting inputs shown above is currently the main way I am accessing the inputs in render passes. It's okay when you only have a few inputs, but it can grow very cumbersome as the input list grows in size. Especially when you suddenly need to go back and change the inputs of previous render passes. To improve this, I want to use templates to pass the inputs into the function as their actual type instead of the generic base interface. This eliminates the need to downcast manually in each pass which is messy, potentially unsafe and a detriment to performance.
+</p>
+
+<p>
+  Anyway, now that we have our input, we can set our viewport and prepare for the main loop:
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  // ...
+
+  RenderCommand::SetClearColour(glm::vec4(-1000.0f));
+  RenderCommand::Clear();
+  RenderCommand::SetViewport({ 0, 0 }, viewportResInput-&gt;Data);
+
+  glm::vec2 clearColour = glm::vec2(-1, -1);
+  targetFramebuffer-&gt;ClearBuffer(FramebufferAttachmentPoint::Colour6, &amp;clearColour[0]);
+
+  // ...
+};
+</code></pre>
+
+<p>
+  We clear the g-buffer and set the rendering viewport size. Then, we specifically clear the framebuffer attachment "Colour6" to the colour { -1, -1 }. This attachment is the metadata attachment representing entityID and lighting model. This is important for the entity picking feature in the editor, which allows the user to click an entity in the viewport to select it by reading the entityID that was written in the renderer. In this case, -1 represents a null entity. When the entity picking feature reads back -1 as the entityID, the current entity will be deselected.
+</p>
+
+<p>
+  As it stands, the static RenderCommand class will immediately dispatch commands to the GPU and acts as an abstraction for whatever rendering API is being used.
+</p>
+
+<p>
+  Now it's time for the main logic of this render pass:
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  // ...
+
+  if (activeCamera && sceneContext) {
+    Renderer::BeginScene(activeCamera-&gt;GetProjection(), cameraWorldTransform, activeCamera-&gt;GetGamma(), activeCamera-&gt;GetExposure());
+
+    {
+      PE_PROFILE_SCOPE("Submit Mesh");
+      BlendState blend;
+      blend.Enabled = false;
+      auto view = sceneContext-&gt;View&lt;ComponentTransform, ComponentMeshRenderer&gt;();
+      for (auto entityID : view)
+      {
+        auto [transform, mesh] = view.get&lt;ComponentTransform, ComponentMeshRenderer&gt;(entityID);
+        Ref&lt;Material&gt; material = AssetManager::GetAsset&lt;Material&gt;(mesh.MaterialHandle);
+
+        AssetHandle materialHandle = mesh.MaterialHandle;
+        if (material)
+        {
+          if (material-&gt;GetShaderRendererContext() == RenderPipelineContext::Forward) { continue; } // skip forward materials
+        }
+        else { materialHandle = Renderer::GetDefaultDeferredMaterial(); } // Render with default forward material
+
+        Renderer::SubmitMesh(mesh.MeshHandle, materialHandle, transform.GetTransform(), mesh.DepthState, mesh.CullState, blend, (int)entityID);
+      }
+    }
+
+    Renderer::EndScene();
+  }
+
+  // ...
+};
+</code></pre>
+
+<p>
+  First, we make sure that we have a valid scene context and an active camera. If so, we call Renderer::BeginScene(). Our Renderer class is a collection of static functions that allows us to compile an optimised list of meshes that are ready to be sent to the GPU for drawing.
+</p>
+
+<details id="beginscene">
+<summary>Why do we need to use Renderer::BeginScene()?</summary>
+<p>
+  Calling BeginScene() tells the renderer to initialise a new collection of meshes and prepare any common uniform buffers that may be used in shaders such as the camera uniform buffer. Once this is done, the renderer will be ready to receive mesh submissions. Each submission will place the mesh into a pool of other meshes depending on the targeted pipeline state. This is all in an effort to reduce the number of wasteful state changes, similar to how we attempted to reduce the number of framebuffer changes in the RenderFrame() function in FrameRenderer.
+  <br><br>
+  To help paint this picture, let's limit the number of variables to just the material and assume that every mesh shares the same vertex buffer, blending state, depth test state, etc. Consider a scene of 10 meshes in which 5 of them use material A, whilst the other 5 use material B. If we render these meshes in a random order, the worst case scenario would be that of constant switching of material bindings. As in, draw mesh 1 with material A -> draw mesh 2 with material B -> mesh 3, material A -> mesh 4, material B, and so on. The result is a total of 10 material bind operations, even though we only use 2 unique materials. To avoid this waste, we group together all meshes that share material A, bind material A once, and render the meshes. Then, bind material B, and render all material B meshes: a total of 2 material bind operations.
+  <br><br>
+  Binding a material can be a heavy operation due to the fact that it binds a shader program <strong><i>and</i></strong> binds its parameters. The parameters of a material can include a large number of texture samplers as well as uniform buffers, so minimising wasteful rebindings of the same material is very important.
+  <br><br>
+  After calling Renderer::BeginScene(), any subsequent calls to Renderer::SubmitMesh() will build a draw list and create pipeline state objects for each mesh group. These pipeline state objects allow us to bind everything from the material to the blending operation being used.
+  <br><br>
+  When we call Renderer::EndScene(), the draw list is executed, and render commands will be sent to the GPU in the optimised order.
+</p>
+</details>
+
+<h4 id="geometrypasscont">Geometry Pass Continued</h4>
+<p>
+  Next, we create a view into our ECS component pools. This provides a collection of components in an optimised memory layout that is more efficient for iteration. We focus on the transform component and the mesh renderer componenet. We then iterate through every entityID in this view and retrieve the transform and mesh component.
+  <br><br>
+  We get the material from the asset manager based on the material handle found in the mesh component. If that material is invalid, or no material is assigned, the default material will be used instead. However, if the material does exist, we first need to make sure that is compatible with our deferred renderer by checking the render pipeline context of the shader.
+  <br><br>
+  The way this validation is set up internally is something I'm not a big fan of. When you write a shader, a preprocess tag is required to specify how the shader is intended to be used in the event that it is attached to a mesh renderer component. Is this a shader built for the forward renderer? Or is this shader built for deferred rendering? This is because of the limitation we imposed earlier, that deferred rendering is only compatible with certain material types. This is how that is enforced. I set it up this way because I didn't want to have multiple types of material classes/assets that are dependent on a render pipeline. This would make things a lot harder for the user if they wanted to switch from a forward renderer to a deferred renderer, all of their materials would now be invalid. For now, I think renderer contexts in the shaders themselves is a reasonable solution, but I would like to take a look at this again in the future.
+  <br><br>
+  There are a lot of options for some small optimisations with this material check. We could make sure the material component pool we are iterating is only populated with deferred materials, we could also make sure the mesh renderer component is responsible for setting the material handle to be that of the default material if none, or an invalid material, is given to it. This would avoid having to check the material and fetch the default material within the render pass.
+  <br><br>
+  Once we have submitted our meshes, we call Renderer::EndScene() to begin drawing.
+  <br><br>
+  And that's it! ...almost.
+  <br><br>
+  This render pass, as it stands, will render all of our meshes to our g-buffer framebuffer perfectly fine and we will be able to proceed with our lighting passes with no issue. However, since we skipped all of the meshes that use a forward renderer specific shader, we need to prepare for our additional forward pass. We could just add an extra pass that renders those meshes to the main framebuffer, but the depth buffer would be missing. So, we need to do one last thing:
+</p>
+
+<pre><code class="language-cpp"></code>
+std::vector&lt;RenderComponentType&gt; geometryPassInputSpec = { RenderComponentType::PrimitiveType, RenderComponentType::Framebuffer };
+std::vector&lt;std::string&gt; geometryPassInputBindings = { "ViewportResolution", "MainFramebuffer" };
+</code></pre>
+
+<p>
+  We add a new input to our render pass: the main framebuffer that will be used by the lighting passes and the additional forward pass.
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  PE_CORE_ASSERT(inputs[0], "Viewport resolution input required");
+  PE_CORE_ASSERT(inputs[1], "Main framebuffer input required");
+  RenderComponentPrimitiveType&lt;glm::ivec2&gt;* viewportResInput = dynamic_cast&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;*&gt;(inputs[0]);
+  RenderComponentFramebuffer* mainFramebufferInput = dynamic_cast&lt;RenderComponentFramebuffer*&gt;(inputs[1]);
+
+  // render meshes with deferred material
+
+  // Blit gBuffer depth / stencil to main framebuffer
+  targetFramebuffer-&gt;BlitTo(mainFramebufferInput-&gt;Framebuffer.get(), (Framebuffer::BufferBit::DEPTH | Framebuffer::BufferBit::STENCIL), Framebuffer::BlitFilter::Nearest);
+};
+</code></pre>
+
+<p>
+  Then, we cast the input down to its desired type like we did with our viewport resolution input. Now that we have our main framebuffer, we need to perform a blit operation on the depth buffer of the g-buffer to the main framebuffer (essentially copying from one framebuffer to another). If we didn't do this, then all of our forward rendered meshes that we render later would potentially be drawn ontop of things they should be occluded by.
+</p>
+
+<p>
+  The result of the geometry pass is a collection of textures that looks like this:
+</p>
+
+<img src="geometryPass.png">
+
+<h4 id="directlight">Direct Lighting Pass</h4>
+<p>
+  We have all of our geometry data written into the appropriate buffers so now it's time to do some lighting calculations with it. This pass takes more inputs than the previous geometry pass, so I won't go into too much detail on each one, but they are pretty self-explanatory:
+</p>
+
+<pre><code class="language-cpp"></code>
+std::vector&lt;RenderComponentType&gt; directLightingInputSpec = { RenderComponentType::PrimitiveType, RenderComponentType::Material, RenderComponentType::PrimitiveType, RenderComponentType::Texture, RenderComponentType::Texture, RenderComponentType::Texture, RenderComponentType::EnvironmentMap };
+std::vector&lt;std::string&gt; directLightingInputBindings = { "ViewportResolution", "DirectLightingPass", "ShadowResolution", "DirLightShadowMap", "SpotLightShadowMap", "PointLightShadowMap", "EnvironmentMap" };
+</code></pre>
+
+<p>
+  As you can see, this demonstrates the issue I mentioned before where things can get really messy as the input count grows. Moving to the render function, downcasting each of the inputs and asserting that they exist is... annoying:
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  PE_PROFILE_SCOPE("Deferred Direct Lighting Pass");
+  Ref&lt;Scene&gt;&amp; sceneContext = context.ActiveScene;
+  Ref&lt;Camera&gt; activeCamera = context.ActiveCamera;
+  const glm::mat4& cameraWorldTransform = context.CameraWorldTransform;
+  PE_CORE_ASSERT(inputs[0], "Viewport resolution input required");
+  PE_CORE_ASSERT(inputs[1], "Lighting pass material input required");
+  PE_CORE_ASSERT(inputs[2], "Shadow resolution input required");
+  PE_CORE_ASSERT(inputs[3], "Dir light shadowmap input required");
+  PE_CORE_ASSERT(inputs[4], "Spot light shadowmap input required");
+  PE_CORE_ASSERT(inputs[5], "Point light shadowmap input required");
+  PE_CORE_ASSERT(inputs[6], "Env map input required");
+  RenderComponentPrimitiveType&lt;glm::ivec2&gt;* viewportResInput = dynamic_cast&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;*&gt;(inputs[0]);
+  RenderComponentMaterial* materialInput = dynamic_cast&lt;RenderComponentMaterial*&gt;(inputs[1]);
+  RenderComponentPrimitiveType&lt;glm::ivec2&gt;* shadowResInput = dynamic_cast&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;*&gt;(inputs[2]);
+  RenderComponentTexture* dirLightShadowInput = dynamic_cast&lt;RenderComponentTexture*&gt;(inputs[3]);
+  RenderComponentTexture* spotLightShadowInput = dynamic_cast&lt;RenderComponentTexture*&gt;(inputs[4]);
+  RenderComponentTexture* pointLightShadowInput = dynamic_cast&lt;RenderComponentTexture*&gt;(inputs[5]);
+  RenderComponentEnvironmentMap* envMapInput = dynamic_cast&lt;RenderComponentEnvironmentMap*&gt;(inputs[6]);
+
+  // ...
+};
+</code></pre>
+
+<p>
+  Once we have collected our inputs, we clear the current framebuffer (in this case, the main framebuffer) and begin preparing our render. Note that we specifically clear the colour buffers and not the depth buffer, we need to keep the depth buffer intact for our additional forward pass. Since we are only rendering a fullscreen quad, we only need to call SubmitMesh once. However, since this is the lighting pass and the material being used needs light source information, we need to also submit all of our scenes light components.
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+
+  // ...
+  
+  targetFramebuffer-&gt;SetDrawBuffers();
+  RenderCommand::Clear(Framebuffer::BufferBit::COLOUR);
+  RenderCommand::SetViewport({ 0, 0 }, viewportResInput-&gt;Data);
+
+  if (activeCamera &amp;&amp; sceneContext) {
+    Renderer::BeginScene(activeCamera-&gt;GetProjection(), cameraWorldTransform, activeCamera-&gt;GetGamma(), activeCamera-&gt;GetExposure());
+
+    // Submit screen quad
+    BlendState blend;
+    blend.Enabled = false;
+    DepthState depthState;
+    depthState.Test = false;
+    Renderer::SubmitDefaultQuad(materialInput-&gt;MaterialHandle, glm::mat4(1.0f), depthState, FaceCulling::BACK, blend, -1);
+
+    {
+      PE_PROFILE_SCOPE("Submit lights");
+      {
+        PE_PROFILE_SCOPE("Directional lights");
+        auto view = sceneContext-&gt;View&lt;ComponentTransform, ComponentDirectionalLight&gt;();
+        for (auto entityID : view) {
+          auto [transform, light] = view.get&lt;ComponentTransform, ComponentDirectionalLight&gt;(entityID);
+          glm::mat4 transformMatrix = transform.GetTransform();
+          glm::mat3 rotationMatrix = glm::mat3(transformMatrix);
+
+          rotationMatrix[0] = glm::normalize(rotationMatrix[0]);
+          rotationMatrix[1] = glm::normalize(rotationMatrix[1]);
+          rotationMatrix[2] = glm::normalize(rotationMatrix[2]);
+
+          Renderer::DirectionalLight lightSource;
+          lightSource.Direction = glm::vec4(glm::normalize(rotationMatrix * glm::vec3(0.0f, 0.0f, 1.0f)), (float)light.CastShadows);
+          lightSource.Diffuse = glm::vec4(light.Diffuse, light.ShadowMinBias);
+          lightSource.Specular = glm::vec4(light.Specular, light.ShadowMaxBias);
+          lightSource.Ambient = glm::vec4(light.Ambient, light.ShadowMapCameraDistance);
+          
+          float shadowSize = light.ShadowMapProjectionSize;
+          
+          glm::mat4 lightView = glm::lookAt(-glm::vec3(lightSource.Direction) * light.ShadowMapCameraDistance, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+          float aspectRatio = (float)shadowResInput-&gt;Data.x / (float)shadowResInput-&gt;Data.y;
+          float orthoLeft = -shadowSize * aspectRatio * 0.5f;
+          float orthoRight = shadowSize * aspectRatio * 0.5f;
+          float orthoBottom = -shadowSize * 0.5f;
+          float orthoTop = shadowSize * 0.5f;
+          
+          glm::mat4 lightProjection = glm::ortho(orthoLeft, orthoRight, orthoBottom, orthoTop, light.ShadowMapNearClip, light.ShadowMapFarClip);
+          lightSource.LightMatrix = lightProjection * lightView;
+          
+          Renderer::SubmitDirectionalLightSource(lightSource);
+        }
+      }
+
+      {
+        PE_PROFILE_SCOPE("Point lights");
+        auto view = sceneContext-&gt;View&lt;ComponentTransform, ComponentPointLight&gt;();
+        // Set up and submit point lights
+        // ...  
+      }
+
+      {
+        PE_PROFILE_SCOPE("Spot lights");
+        auto view = sceneContext-&gt;View&lt;ComponentTransform, ComponentSpotLight&gt;();
+        // Set up and submit spot lights
+        // ...
+      }
+    }
+
+    // ...
+  }
+};
+</code></pre>
+
+<p>
+  When we submit a light source to the renderer class, it will add the light to a local instance of a uniform buffer. This uniform buffer of lights will be uploaded to the GPU once we call Renderer::EndScene().
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  
+  // ...
+
+  if (activeCamera &amp;&amp; sceneContext) {
+
+    // ...
+
+    if (dirLightShadowInput) {
+      Ref&lt;Texture2DArray&gt; dirLightShadowTexture = AssetManager::GetAsset&lt;Texture2DArray&gt;(dirLightShadowInput-&gt;TextureHandle);
+      PE_CORE_ASSERT(dirLightShadowTexture-&gt;GetType() == AssetType::Texture2DArray, "Invalid directional light shadow map type");
+      dirLightShadowTexture-&gt;Bind(0);
+    }
+    if (spotLightShadowInput) {
+      Ref&lt;Texture2DArray&gt; spotLightShadowTexture = AssetManager::GetAsset&lt;Texture2DArray&gt;(spotLightShadowInput-&gt;TextureHandle);
+      PE_CORE_ASSERT(spotLightShadowTexture-&gt;GetType() == AssetType::Texture2DArray, "Invalid spot light shadow map type");
+      spotLightShadowTexture-&gt;Bind(1);
+    }
+    if (pointLightShadowInput) {
+      Ref&lt;TextureCubemapArray&gt; pointLightShadowTexture = AssetManager::GetAsset&lt;TextureCubemapArray&gt;(pointLightShadowInput-&gt;TextureHandle);
+      PE_CORE_ASSERT(pointLightShadowTexture-&gt;GetType() == AssetType::TextureCubemapArray, "Invalid point light shadow map type");
+      pointLightShadowTexture-&gt;Bind(2);
+    }
+
+    if (envMapInput)
+    {
+      Ref&lt;EnvironmentMap&gt; envMap = AssetManager::GetAsset&lt;EnvironmentMap>(envMapInput-&gt;EnvironmentHandle);
+      AssetManager::GetAsset&lt;TextureCubemap&gt;(envMap->GetIrradianceMapHandle())-&gt;Bind(10);
+      AssetManager::GetAsset&lt;TextureCubemap&gt;(envMap->GetPrefilteredMapHandle())-&gt;Bind(11);
+      AssetManager::GetAsset&lt;Texture2D&gt;(EnvironmentMap::GetBRDFLutHandle())-&gt;Bind(12);
+    }
+
+    Renderer::EndScene();
+  }
+};
+</code></pre>
+
+<p>
+  After we have submitted our light sources, we check to see if our shadow map array inputs are valid and bind them for rendering. We do the same for the environment map input before calling Renderer::EndScene().
+</p>
+
+<p>
+  This is the result of the direct lighting pass:
+</p>
+<img src="directLightingPass.png">
+
+<h4 id="indirectlight">Indirect Lighting Pass</h4>
+
+<p>
+  We then have an additional lighting pass called "IndirectLightingPass". This lighting pass uses the results of the screen space reflections and screen space ambient occlusion passes, as well as environment map data to render indirect lighting contribution on the existing "lit" screen quad.
+  <br><br>
+  This pass is similar to the previous lighting pass on the CPU side, with the exception that it doesn't need to submit direct light sources (since this is specifically the "indirect" lighting pass, as in: skybox lighting, reflections, etc). Because of this, I won't show the entire pass again. However, there is one quirk to focus on here:
+  <br><br>
+  Both of these lighting passes are writing to the main framebuffer, but the indirect lighting pass needs to also read the result of the previous pass. This is because, if we just write the indirect results to the texture, it will overwrite the direct lighting pass, and we'd be left with just indirect lighting. So, we need to add the indirect lighting contribution to the direct lighting contribution, meaning, we need to read the direct lighting pass result in the indirect lighting pass. Another reason is due to how screen space reflections work, we can't reflect anything in screen space without actually being able to read the reflected screen colour.
+  <br><br>
+  We can't read and write to the same texture in a fragment shader safely, so how do solve this problem?
+  <br><br>
+  With pong-pong!
+</p>
+
+<pre><code class="language-cpp"></code>
+RenderPass::OnRenderFunc indirectLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
+  
+  // ...
+
+  // Ping - pong framebuffer attachment
+  Ref&lt;FramebufferAttachment&gt; attach = targetFramebuffer-&gt;GetAttachment(FramebufferAttachmentPoint::Colour0);
+  PE_CORE_ASSERT(attach-&gt;GetType() == FramebufferAttachmentType::Texture2D, "Invalid framebuffer attachment");
+  AssetHandle screenTextureInputHandle = targetTextureInput-&gt;TextureHandle;
+  AssetHandle currentTargetTexture = static_cast&lt;FramebufferTexture2DAttachment*&gt;(attach.get())-&gt;GetTextureHandle();
+  if (currentTargetTexture != screenTextureInputHandle)
+  {
+    Ref&lt;FramebufferTexture2DAttachment&gt; attach = FramebufferTexture2DAttachment::Create   (FramebufferAttachmentPoint::Colour0, screenTextureInputHandle);
+    targetFramebuffer-&gt;AddColourAttachment(attach);
+  }
+
+  // ...
+};
+</code></pre>
+
+<p>
+  When we defined our main framebuffer, we created two textures that represent the screen texture: "ScreenTexture" and "AlternateScreenTexture". The alternate screen texture was created for this exact scenario, where we need to read the screen and write to the screen at the same time. This is called a "ping-pong framebuffer". The concept is simple, attach the alternate texture for writing, and bind the main texture for reading. This would then be reversed later either by performing more "ping-pong" operations until the main screen texture is back to being the "main" write texture again, or, corrected in later render passes. Another example of where this technique is used is a multi-pass gaussian blur. This involves blurring an image horizontally, and then blurring that result vertically to get the final blurred image.
+  <br><br>
+  However, the above example isn't the most ideal in terms of performance. It involves manually re-attaching texture attachments to the framebuffer with every "ping-pong" operation. The better way to do this would be to have both textures attached at all times, and simply change the active draw buffers depending on which textures are being read from and written to. Unfortunately, all of our shaders are explicitly set up to write to colour attachment 0, and I don't like the idea of making a mess in the shaders to make them dynamically choose which output they should be writing to. So, I chose to re-attach them in colour buffer 0.
+  <br><br>
+  There is room for improvement by defining a special kind of framebuffer / framebuffer attachment specifically for this technique. Doing so would clean up the code in the render passes, avoiding having to manually swap the attachments. Furthermore, it would remove the need to manually manage each attachment and how they are being "ping-ponged" between render passes.
+  <br><br>
+  As a quick draft, I would imagine the interface for using this type would be something like this:
+</p>
+
+<pre><code class="language-cpp"></code>
+// Gaussian Blurr style use
+
+pingPongFBO->BindBackBufferToSlot(0);
+
+// Horizontal blur pass
+// ...
+
+pingPongFBO->SwapBuffers();
+pingPongFBO->BindBackBufferToSlot(0);
+
+// Vertical blur pass
+// ...
+
+// Display final blurred image
+renderImageToViewport(pingPongFBO->GetTopBuffer());
+</code></pre>
+
+<p>
+  This is the result of the indirect lighting pass:
+</p>
+<img src="indirectLightingPass.png">
+
+<h4 id="final">Final pipeline</h4>
+<p>
+  With those core render passes defined, we have a usable deferred renderer. There is a bit more to the renderer I set up, but we would be here all day discussing different rendering techniques if I went into more detail, and this post is long enough already!
+  <br><br>
+  To give you an idea of how everything flows, here is the list of render passes being added to the frame renderer:
+</p>
+
+<pre><code class="language-cpp"></code>
+// Add render passes
+// -----------------
+
+// Shadow mapping
+out_Framerenderer->AddRenderPass(RenderPass(dirLightShadowPassInputSpec, dirLightShadowPassFunc), dirSpotPointShadowFBOs[0], dirLightShadowPassInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(spotLightShadowPassInputSpec, spotLightShadowPassFunc), dirSpotPointShadowFBOs[1], spotLightShadowPassInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(pointLightShadowPassInputSpec, pointLightShadowFunc), dirSpotPointShadowFBOs[2], pointLightShadowPassInputBindings);
+
+// Deferred rendering
+out_Framerenderer->AddRenderPass(RenderPass(geometryPassInputSpec, geometryPass3DFunc), gBuffer, geometryPassInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(maxReduceInputSpec, maxReducePassFunc), texturedFBO, maxReduceInputBindings); // TODO: consider writing to gBuffer
+out_Framerenderer->AddRenderPass(RenderPass(ssaoPassInputSpec, ssaoPassFunc), texturedFBO, ssaoPassInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(ssrUVPassInputSpec, ssrUVPassFunc), texturedFBO, ssrUVPassInputBindings);
+
+// Lighting
+out_Framerenderer->AddRenderPass(RenderPass(directLightingInputSpec, directLightingPassFunc), mainFramebuffer, directLightingInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(indirectLightingInputSpec, indirectLightingPassFunc), mainFramebuffer, indirectLightingInputBindings);
+
+out_Framerenderer->AddRenderPass(RenderPass(forward2DInputSpec, forward2DPass), mainFramebuffer, forward2DInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(forward3DInputSpec, forward3DPass), mainFramebuffer, forward3DInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(skyboxInputSpec, skyboxPass), mainFramebuffer, skyboxInputBindings);
+
+// Bloom
+out_Framerenderer->AddRenderPass(RenderPass(bloomDownsampleInputSpec, bloomDownsamplePass), bloomFBO, bloomDownsampleInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(bloomUpsampleInputSpec, bloomUpsamplePass), bloomFBO, bloomUpsampleInputBindings);
+out_Framerenderer->AddRenderPass(RenderPass(bloomCombineInputSpec, bloomCombinePass), mainFramebuffer, bloomCombineInputBindings);
+
+// Editor overlay
+out_Framerenderer->AddRenderPass(RenderPass({ RenderComponentType::PrimitiveType, RenderComponentType::PrimitiveType, RenderComponentType::PrimitiveType, RenderComponentType::PrimitiveType, RenderComponentType::Texture }, debugOverlayPass), mainFramebuffer, { "ShowColliders", "SelectedEntity", "OutlineThickness", "OutlineColour", "AlternateScreenTexture" });
+
+// Post process
+out_Framerenderer->AddRenderPass(RenderPass({ RenderComponentType::PrimitiveType, RenderComponentType::Texture, RenderComponentType::Material, RenderComponentType::Texture }, gammaTonemapPass), mainFramebuffer, { "ViewportResolution", "ScreenTexture", "GammaTonemapMaterial", "AlternateScreenTexture" });
+</code></pre>
+
+<p>
+  And here is the final result:
+</p>
+<img src="finalImage.png">
+
+</section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+
+  <footer>
+    <nav class="post-nav">
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-solution.html">← Back: Solution</a>
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-profiling.html">Next: Profiling →</a>
+    </nav>
+  </footer>
+
+</body>
+</html>

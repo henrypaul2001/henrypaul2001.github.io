@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Deferred Rendering and Render Passes in Paul Engine</title>
+  <link rel="stylesheet" href="../../assets/css/retro.css" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+  <header>
+    <div class="site-title">
+      <h1>Paul Engine</h1>
+    </div>
+    <div class="post-meta">
+      <h2>Progress Report: Deferred Rendering and Render Passes in Paul Engine</h2>
+      <p class="date">Date published: 27/07/2025</p>
+    </div>
+    <nav class="post-nav">
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-intro.html">← Back: Intro</a>
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-deferred.html">Next: Deferred Rendering →</a>
+    </nav>
+    <nav class="toc">
+      <h4>Contents</h4>
+      <ul>
+        <li><a href="#RenderPass">Render Pass</a></li>
+        <li><a href="#RenderComponent">Render Component</a></li>
+        <li><a href="#FrameRenderer">Frame Renderer</a></li>
+        <li><a href="#AddRenderPass">AddRenderPass()</a></li>
+        <li><a href="#RenderFrame">RenderFrame()</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <section>
+      <h3>Solution</h3>
+      <p>With that said, here is my initial solution to this problem:</p>
+
+      <h4 id="RenderPass">Render Pass</h4>
+      <p>
+      Firstly, what is a render pass? Well, it depends on what you mean. As of now, this engine is using OpenGL. However, if you stroll over to Vulkan land, a render pass is an actual Vulkan object that needs to be set up (I haven't used Vulkan yet, but I'm pretty sure the render pass in Vulkan is responsible for creating a GPU command buffer and general GPU pipeline state). Since I'm only dealing with OpenGL right now, and I am yet to embark on the gruelling journey of learning Vulkan, I want to keep the render pass simple. In this case, a render pass is just a function with a specified set of input types:
+      </p>
+
+<pre><code class="language-cpp">
+class RenderPass
+{
+public:
+    struct RenderPassContext
+    {
+        Ref&lt;Scene&gt; ActiveScene;
+        Ref&lt;Camera&gt; ActiveCamera;
+        glm::mat4 CameraWorldTransform;
+    };
+    using OnRenderFunc = std::function&lt;void(RenderPassContext&amp;, Ref&lt;Framebuffer&gt;, std::vector&lt;IRenderComponent*&gt;)&gt;;
+    RenderPass(std::vector&lt;RenderComponentType&gt; inputTypes, OnRenderFunc renderFunc) : m_InputTypes(inputTypes), m_RenderFunc(renderFunc) {}
+
+    void OnRender(RenderPassContext context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) { m_RenderFunc(context, targetFramebuffer, inputs); }
+
+private:
+    UUID m_RenderPassID;
+    OnRenderFunc m_RenderFunc;
+
+    std::vector&lt;RenderComponentType&gt; m_InputTypes;
+};
+</code></pre>
+
+      <p>
+        Note that the OnRenderFunc is set up to provide any general arguments that may be needed in an average render pass. These arguments will be provided by the FrameRenderer class. The active scene context will provide access to any entity and their associated components. The active camera context makes it much easier to run the entire render pipeline with different cameras and without having to change anything in the individual render passes or their inputs. The FrameRenderer will also pass in the active framebuffer in the event that the render pass needs to change some state on the framebuffer such as swapping a colour attachment. And finally, a collection of render components.
+      </p>
+
+      <h4 id="RenderComponent">Render Component</h4>
+      <p>
+        The render component interface provides a way to store render resources such as textures and framebuffers in a generic form so that they can be given to render pass functions as inputs. The implementation is extremely simple as the components themselves are meant to act as simple wrappers for the underlying resource:
+      </p>
+
+<pre><code class="language-cpp">
+enum class RenderComponentType
+{
+  None = 0,
+  Framebuffer,
+  Texture,
+  PrimitiveType
+  // ...
+};
+
+struct IRenderComponent
+{
+  virtual ~IRenderComponent() {}
+  virtual RenderComponentType GetType() const = 0;
+  virtual void OnImGuiRender() = 0; // used for editor UI
+};
+
+struct RenderComponentFramebuffer : public IRenderComponent
+{
+  RenderComponentFramebuffer(Ref&lt;Framebuffer&gt; framebuffer) : Framebuffer(framebuffer) {}
+  RenderComponentFramebuffer(const FramebufferSpecification&amp; spec) : Framebuffer(Framebuffer::Create(spec)) {}
+
+  virtual RenderComponentType GetType() const override { return RenderComponentType::Framebuffer; }
+  virtual void OnImGuiRender() override;
+
+  Ref&lt;Framebuffer&gt; Framebuffer;
+};
+
+struct RenderComponentTexture : public IRenderComponent
+{
+  RenderComponentTexture(AssetHandle textureHandle) : TextureHandle(textureHandle) {}
+
+  virtual RenderComponentType GetType() const override { return RenderComponentType::Texture; }
+  virtual void OnImGuiRender() override;
+
+  AssetHandle TextureHandle;
+};
+</code></pre>
+
+      <p>
+        As you can see, very simple stuff. I didn't list the other components here, however, I will point out that there are multiple render components that are almost identical due to the fact that they simply wrap an asset handle like the texture render component above. For example, RenderComponentMaterial and RenderComponentEnvironmentMap. The only difference being the RenderComponentType returned when calling GetType() on the component. I set it up this way to avoid having to run the asset handle through the asset manager to determine its asset type (i.e: does this asset handle belong to a texture? Or a material?). 
+        <br><br>
+        We could use a generic "RenderComponentAssetHandle", but I would rather the type of asset be explicitly clear at a glance. Either way, the current list of render components are not set in stone. A quick improvement to make would be to check the asset handle against the render component type in the component constructor to make sure the correct asset is actually being stored. You wouldn't want to input a texture into a render pass that is expecting a material. For now, I think this is fine.
+        <br><br>
+        There is also an "edge case" component type. The primitive type component. It's just a simple templated component type that allows for any data type to be stored in the frame renderer even if not explicitly supported. This can range from a simple integer value to a custom type such as the one shown later with "BloomMipChain":
+      </p>
+
+<pre><code class="language-cpp">
+// Create a new interface type that allows us to check the 
+// underlying templated type info so we can safely downcast
+struct IRenderComponentPrimitiveType : public IRenderComponent
+{
+  virtual const std::type_info&amp; GetPrimitiveTypeInfo() const = 0;
+};
+
+template&lt;typename T&gt;
+struct RenderComponentPrimitiveType : public IRenderComponentPrimitiveType
+{
+  RenderComponentPrimitiveType(T data) : Data(data) {}
+
+  virtual RenderComponentType GetType() const override { return RenderComponentType::PrimitiveType; }
+  virtual void OnImGuiRender() override;
+
+  virtual const std::type_info&amp; GetPrimitiveTypeInfo() const override { return typeid(T); }
+
+  T Data;
+};
+</code></pre>
+
+      <p>
+        This does, unfortunately, make it a bit more difficult to implement the OnImGuiRender function though. For a few reasons. First, each templated instance needs its own implementation of the function. How many possible instances should the engine cover by default? I went with the "I'll add more as I need them approach". Right now, float types, integer types, unsigned integer types and the boolean type are supported with a default draw function. The second issue is that I don't want to expose ImGui in the RenderComponent header file, and templated functions can't be defined in the CPP file. So, here is a quick workaround:
+      </p>
+
+<pre><code class="language-cpp">
+namespace RenderComponentImGuiUtils
+{
+  void DrawNotYetImplemented();
+
+  void DrawEditFloat (float* f, const float speed = 0.1f);
+  void DrawEditFloat2(float* f, const float speed = 0.1f);
+  void DrawEditFloat3(float* f, const float speed = 0.1f);
+  void DrawEditFloat4(float* f, const float speed = 0.1f);
+
+  void DrawEditInt (int* i, const float speed = 1.0f);
+  void DrawEditInt2(int* i, const float speed = 1.0f);
+  void DrawEditInt3(int* i, const float speed = 1.0f);
+  void DrawEditInt4(int* i, const float speed = 1.0f);
+
+  void DrawEditUInt(unsigned int* i, const float speed = 1.0f);
+  void DrawEditUInt2(unsigned int* i, const float speed = 1.0f);
+  void DrawEditUInt3(unsigned int* i, const float speed = 1.0f);
+  void DrawEditUInt4(unsigned int* i, const float speed = 1.0f);
+
+  void DrawCheckbox(bool* b);
+}
+</code></pre>
+
+      <p>
+        We define some generic draw functions in the header file which have their implementations in the CPP file (where we #include &lt;ImGui.h&gt;).
+        <br><br>
+        Then, back in the header file, we define our templated OnImGuiRender functions like this:
+      </p>
+
+<pre><code class="language-cpp">
+template&lt;typename T&gt;
+inline void RenderComponentPrimitiveType&lt;T&gt;::OnImGuiRender()
+{
+  RenderComponentImGuiUtils::DrawNotYetImplemented();
+}
+
+//  Float
+// -------
+inline void RenderComponentPrimitiveType&lt;float&gt;::OnImGuiRender()
+{
+  RenderComponentImGuiUtils::DrawEditFloat(&amp;Data, 0.1f);
+}
+inline void RenderComponentPrimitiveType&lt;glm::vec2&gt;::OnImGuiRender()
+{
+  RenderComponentImGuiUtils::DrawEditFloat2(&amp;Data[0], 0.1f);
+}
+
+// other types
+// ...
+</code></pre>
+
+      <h4 id="FrameRenderer">Frame Renderer</h4>
+      <p>
+        The idea is pretty straightforward. We need a class that can own all of our render resources, provide an interface for modifying these resources and manage all of our render passes.
+        <br><br>
+        First up, we define some basic functions and a constructor. We pass an event function parameter to the constructor so that we can hook up our frame renderer to an event system. This allows us to handle any events that might affect our render pipeline in some way. For example, if the main viewport is resized, we should resize our framebuffer render resources.
+      </p>
+
+<pre><code class="language-cpp">
+class FrameRenderer
+{
+public:
+  using OnEventFunc = std::function&lt;void(Event&amp;, FrameRenderer*)&gt;;
+  FrameRenderer(OnEventFunc eventFunc = [](Event&amp; e, FrameRenderer* self) {}) : m_OnEvent(eventFunc) {}
+
+  void RenderFrame(Ref&lt;Scene&gt; sceneContext, Ref&lt;Camera&gt; activeCamera, glm::mat4 cameraWorldTransform);
+  void OnEvent(Event&amp; e) { m_OnEvent(e, this); }
+
+  // ...
+private:
+  std::vector&lt;RenderPass&gt; m_OrderedRenderPasses;
+  std::vector&lt;std::string&gt; m_SerializedComponentNames;
+  std::unordered_map&lt;std::string, Scope&lt;IRenderComponent&gt;&gt; m_RenderResources;
+  std::unordered_map&lt;UUID, Ref&lt;Framebuffer&gt;&gt; m_FramebufferMap;
+  std::unordered_map&lt;UUID, std::vector&lt;IRenderComponent*&gt;&gt; m_InputMap;
+
+  OnEventFunc m_OnEvent;
+};
+</code></pre>
+
+      <p>
+        We also define some member variables. Two lists: one being the complete list of render passes that make a frame, in the order they were given. Then, a list of render component names that are intended to be serialized. This is so we can simply iterate over these components when rendering the editor UI for the frame renderer and when we come to serialize these fields.
+        <br><br>
+        We also have some maps. First, a map of names to their respective render component. Since each render pass has its own universally unique ID, we can use this ID to map each unique render pass to a framebuffer and a set of inputs as shown by m_FramebufferMap and m_InputMap. The input map represents the fixed set of components that will be passed to each OnRender function in the render pass collection. We could combine these two maps into one and define a simple struct that contains both the framebuffer and the inputs, this struct could also be used in the OnRenderFunc signature to clean the parameters up a bit.
+      </p>
+
+<pre><code class="language-cpp">
+struct RenderPassParameters
+{
+  Ref&lt;Framebuffer&gt; TargetFramebuffer;
+  std::vector&lt;IRenderComponent*&gt; InputComponents;
+}
+std::unordered_map&lt;UUID, RenderPassParameters&gt; m_ParameterMap;
+</code></pre>
+
+      <p>
+        This would eliminate the worry of the maps going out of sync with each other and it would reduce the number of lookups we have to make.
+        <br><br>
+        You may have noticed the "Scope" type used in m_RenderResources. Currently, Scope is just an alias for "std::unique_ptr". A type of smart pointer that will deallocate the memory when the Scope object is popped off the stack. You may have also noticed that we are using raw pointers to these render components in RenderPassParameters. Now, what if one of the Scope pointers in the render resources list is removed? That would mean the raw pointer used elsewhere is now invalid. As of now, this problem is avoided by simply not providing a way to remove a render resource after it has been added.
+        <br><br>
+        I'm still considering how to move forward with the design, but I like the idea of the FrameRenderer being something you set up once and never change. If something in the pipeline does change, like disabling a render pass, then a new FrameRenderer will be "baked" with that pass and its resources removed. For this to be viable, construction of the renderer would need to be lightweight (you wouldn't want your entire game to hang for a few seconds every time you disable a simple graphics option). Whether or not that is a realistic goal is to be determined. Either way, not set in stone, likely to change!
+      </p>
+
+      <p>
+        With the outline defined, the implementation is pretty straightforward stuff. Mainly inserting elements into an unordered_map.
+        <br><br>
+        First, let's take a look at AddRenderResource():
+      </p>
+
+<pre><code class="language-cpp">
+#include &lt;concepts&gt;
+
+template &lt;typename T&gt;
+concept IsRenderComponent = std::derived_from&lt;T, IRenderComponent&gt;;
+
+class FrameRenderer
+{
+  // ...
+
+  template &lt;IsRenderComponent T, typename... Args&gt;
+  bool AddRenderResource(const std::string&amp; uniqueName, bool serialized, Args&amp;&amp;... args)
+  {
+    auto it = m_RenderResources.find(uniqueName);
+    if (it != m_RenderResources.end())
+    {
+      PE_CORE_ERROR("Render resource with name '{0}' already exists in frame renderer", uniqueName);
+      return false;
+    }
+    m_RenderResources[uniqueName] = CreateScope&lt;T&gt;(std::forward&lt;Args&gt;(args)...);
+    if (serialized) { m_SerializedComponentNames.push_back(uniqueName); }
+    return true;
+  }
+
+  // ...
+};
+</code></pre>
+
+      <p>
+        Like I said, pretty simple std::unordered_map operations. We take a unique name for the resource as a parameter and check the resources map to see if that name has already been entered. If this name is already being used, we return false. If not, we add the resource to the map. This is also where we declare whether or not a resource should be serialized. And, if that's the case, we add the name of the resource to the serialized names list.
+        <br><br>
+        This is a templated function that includes a pack (seen with typename... Args). This allows us to pass in one or more arguments to be used when instantiating the Scope pointer in the frame renderer (seen with std::forward&lt;Args&gt;(args)...).
+        <br><br>
+        Note the use of concepts. We define a concept called IsRenderComponent that checks to see if a type is derived from our base IRenderComponent class to make sure that a templated instance of this function will be able to insert the resource into the resource map. Now, if you attempt to instantiate this function with a type that isn't derived from IRenderComponent, the code will not compile, regardless of whether or not we use the concepts feature. However, when we do use concepts, we get a much clearer compiler error message that explicitly tells the user why that type can't be used. 
+      </p>
+
+      <p>
+        Following this, we have some simple functions for retrieving render components either as the base IRenderComponent type or downcasted to a specified type when that type is known:
+      </p>
+
+<pre><code class="language-cpp">
+template &lt;typename T&gt;
+T* GetRenderResource(const std::string&amp; resourceName)
+{
+  IRenderComponent* component = GetRenderResource(resourceName);
+  if (component)
+  {
+    T* casted_component = dynamic_cast&lt;T*&gt;(component);
+    if (!casted_component) { PE_CORE_ERROR("Error casting render component '{0}'. nullptr returned", resourceName); }
+    return casted_component;
+  }
+  return nullptr;
+}
+
+IRenderComponent* GetRenderResource(const std::string&amp; resourceName)
+{
+  auto it = m_RenderResources.find(resourceName);
+  if (it != m_RenderResources.end())
+  {
+    return m_RenderResources[resourceName].get();
+  }
+  PE_CORE_WARN("Unknown render resource '{0}'", resourceName);
+  return nullptr;
+}
+</code></pre>
+      <h4 id="AddRenderPass">AddRenderPass()</h4>
+      <p>
+        Now let's take a look at the AddRenderPass() function:
+      </p>
+
+<pre><code class="language-cpp">
+  bool AddRenderPass(RenderPass renderPass, Ref&lt;Framebuffer&gt; targetFramebuffer = nullptr, std::vector&lt;std::string&gt; inputBindings = {});
+</code></pre>
+
+      <p>
+        The first parameter is simply the render pass object itself. Followed by the target framebuffer of the render pass. Finally, a list of resource names to map the inputs to the render pass.
+        <br><br>
+        Remember, when we defined the render pass, we declared a list of input types. We can define a render pass that takes in two texture inputs and a material input. The actual value of these inputs are then specified by the names given to this function. It's important to declare the input bindings and target framebuffer outside of the render pass object itself so that a render pass can remain as generic as possible. We don't want to tie a render pass to a specific texture input or framebuffer, and we want to be able to re-use a render pass specification in the same render pipeline with different variations of input bindings and/or framebuffer.
+        <br><br>
+        Note: because each render pass owns its UUID, there is actually no current way to use the same render pass object twice. You can think of the UUID being tied to an instance of a render pass. Let's say we have a generic render pass that copies an input texture to the target framebuffer. If we want to use that render pass more than once, we need to construct multiple instances of it. Currently, constructing a render pass is relatively lightweight (just an std::vector copy, a function assignment, and a UUID generation), so this isn't a big problem. But, in the future, it may be worth rethinking the association of a render pass and its UUID so that we don't need to construct multiple instances of a pass.
+        <br><br>
+        Now, on to the implementation:
+      </p>
+
+<pre><code class="language-cpp">
+bool FrameRenderer::AddRenderPass(RenderPass renderPass, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;std::string&gt; inputBindings)
+{
+  PE_PROFILE_FUNCTION();
+  const UUID&amp; renderID = renderPass.GetRenderID();
+  auto it = m_ParameterMap.find(renderID);
+  if (it != m_ParameterMap.end())
+  {
+    PE_CORE_ERROR("RenderPass with ID '{0}' already exists in FrameRenderer", std::to_string(renderID));
+    return false;
+  }
+  
+  // ...
+}
+</code></pre>
+
+      <p>
+        First, we do a check against the render pass ID to see if it has already been added to the frame renderer. This is important because we use this ID to map a render pass instance to a specific set of input bindings.
+      </p>
+
+<pre><code class="language-cpp">
+bool FrameRenderer::AddRenderPass(RenderPass renderPass, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;std::string&gt; inputBindings)
+{
+
+  // ...
+
+  std::vector&lt;IRenderComponent*&gt; inputs;
+  inputs.reserve(inputBindings.size());
+  for (int i = 0; i &lt; inputBindings.size(); i++)
+  {
+    const std::string&amp; inputName = inputBindings[i];
+    if (m_RenderResources.find(inputName) == m_RenderResources.end())
+    {
+      PE_CORE_ERROR("Unknown render resource '{0}'", inputName);
+      return false;
+    }
+    IRenderComponent* component = m_RenderResources[inputName].get();
+    if (component-&gt;GetType() == renderPass.GetInputTypes()[i])
+    {
+      inputs.push_back(m_RenderResources[inputName].get());
+    }
+    else
+    {
+      PE_CORE_ERROR("Mismatching input types for render pass with ID '{0}'. 
+        Expected: '{1}' ... Actual: '{2}'", std::to_string(renderID), 
+        RenderComponentTypeString(renderPass.GetInputTypes()[i]), 
+        RenderComponentTypeString(m_RenderResources [inputName]-&gt;GetType()));
+      return false;
+    }
+  }
+  m_ParameterMap[renderID] = { targetFramebuffer, inputs };
+
+  m_OrderedRenderPasses.push_back(renderPass);
+  return true;
+}
+</code></pre>
+
+      <p>
+        If this is a unique render pass, then we can start processing the input bindings. We simply iterate over the inputBindings vector of strings and find the corresponding render resource in the frame renderer with that name. If a resource couldn't be found, we hit an early return and display an error message. If the resource does exist, we need to perform another validation step. When we define a render pass, we define an ordered list of input types. Such as:
+        
+        <pre><code class="language-cpp">
+          { RenderComponentType::Texture, RenderComponentType::Material }
+        </code></pre>
+      
+        The types specified in a render pass must match the component types specified by the input bindings of the AddRenderPass function. With the above input spec example, if we pass { "ScreenTexture", "ShadowFramebuffer" } into the inputBindings parameter, the function will return false when it attempts to bind the "ShadowFramebuffer" resource to a material input on the render pass.
+        <br><br>
+        Following these simple validations, if there are no issues, we push the input bindings and target framebuffer into the parameter map and push the render pass into the frame renderer.
+      </p>
+      
+      <h4 id="RenderFrame">RenderFrame()</h4>
+      <p>
+        The final function implementation of FrameRenderer is the RenderFrame function. This is the function that will be called in the main update loop and is responsible for running our entire render pipeline from start to finish.
+      </p>
+
+<pre><code class="language-cpp">
+void FrameRenderer::RenderFrame(Ref&lt;Scene&gt; sceneContext, Ref&lt;Camera&gt; activeCamera, glm::mat4  cameraWorldTransform)
+{
+  PE_PROFILE_FUNCTION();
+  Ref&lt;Framebuffer&gt; currentTarget = nullptr;
+  for (RenderPass&amp; p : m_OrderedRenderPasses) {
+    const UUID&amp; renderID = p.GetRenderID();
+    RenderPassParameters params = m_ParameterMap[renderID];
+
+    // First check if next render pass uses the same framebuffer as previous pass to avoid state changes
+    const Ref&lt;Framebuffer&gt;& targetFramebuffer = params.TargetFramebuffer;
+    if (currentTarget.get() &amp;&amp; currentTarget.get() != targetFramebuffer.get()) {
+      if (targetFramebuffer) {
+        targetFramebuffer-&gt;Bind();
+      }
+      else if (currentTarget) {
+        currentTarget->Unbind();
+      }
+    }
+    else if (targetFramebuffer.get()) {
+      targetFramebuffer-&gt;Bind();
+    }
+    currentTarget = targetFramebuffer;
+
+    p.OnRender({ sceneContext, activeCamera, cameraWorldTransform }, targetFramebuffer, params.InputComponents);
+  }
+}
+</code></pre>
+
+      <p>
+        This function simply iterates over each render pass in the list and invokes the OnRender function for each pass, giving it the inputs it needs from the parameter map.
+        <br><br>
+        See that big horrible nested if statement? I hate it. But, it has a very good reason for being there. As important as it is, it's also not set in stone, and I have some ideas as to how I could accomplish this better, for now it's fine as a prototype.
+        <br><br>
+        The goal of the if statements is to reduce the number of costly GPU state changes. In OpenGL, one of the more expensive state changes you can make is to bind a framebuffer. So, the idea is to avoid doing that whenever we can. Note: when we call Unbind() on a framebuffer, we are essentially binding the back buffer of the rendering context.
+        <br><br>
+        The way I have this set up currently pretty much spits on everything I was talking about earlier in regards to branches and messy if statements, it also doesn't take advantage of one of the main design intentions I specified. That is, the renderer should be set up, or "baked", once. Now, the target framebuffer of each render pass isn't something that ever changes, so why are we trying to dynamically figure out when to change framebuffer during <strong><i>every</i></strong> frame?
+        <br><br>
+        So, how else could we do it? One way would be adding another function, called something like "renderPass.Prepare()". The logic of this function would be determined by the frame renderer when the render pass is added with AddRenderPass(). Right now, the function would do 1 of 3 things: bind the target framebuffer, unbind the current framebuffer, or do nothing.
+        <br><br>
+        The reason I haven't set this up yet is because I think it will be solved by the larger rework I intend to explore. That being a pure render command approach, where each render pass is a list of render commands that are passed to the GPU in sequence. The framebuffer state change optimisation would simply be another command in that list, or lack of command if the optimisation deems it unnecessary.
+        <br><br>
+        With all that being said, the current implementation is perfectly fine to start with. I'm assuming the cost of unnecessary GPU state changes outweighs the cost of this innocent little if statement. And let's be real, it's messy, but it's not <i>that</i> messy.
+      </p>
+
+</section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+
+  <footer>
+    <nav class="post-nav">
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-intro.html">← Back: Intro</a>
+        <a href="deferred-rendering-and-render-passes-in-paul-engine-deferred.html">Next: Deferred Rendering →</a>
+    </nav>
+  </footer>
+
+</body>
+</html>
