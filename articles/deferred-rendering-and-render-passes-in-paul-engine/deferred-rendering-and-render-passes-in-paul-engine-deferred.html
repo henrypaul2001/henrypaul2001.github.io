@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <title>Deferred Rendering and Render Passes in Paul Engine</title>
   <link rel="stylesheet" href="../../assets/css/retro.css" />
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="../../highlight.js/styles/vsCustom.css">
+  <script src="../../highlight.js/highlight.js"></script>
+  <script src="../../highlight.js/languages/cpp.js"></script>
+  <script>hljs.highlightAll();</script>
 </head>
 <body>
   <header>
@@ -141,7 +144,7 @@ Ref&lt;FramebufferTexture2DAttachment&gt; depthAttach = FramebufferTexture2DAtta
         Finally, we create the geometry framebuffer:
       </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 Ref&lt;Framebuffer&gt; gBuffer = Framebuffer::Create(gBufferSpec, { positionAttachment, normalAttachment, albedoAttachment, specularAttachment, armAttachment, emissionAttachment, metadataAttachment }, depthAttach);
 out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("gBuffer", false, gBuffer);
 </code></pre>
@@ -150,7 +153,7 @@ out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentFramebuffer&gt;("gBuff
         The next section calls existing functions for setting up some more resources. These resources are identical to the ones found in the original forward renderer, so they can be re-used here:
       </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 Ref&lt;Framebuffer&gt; mainFramebuffer = InitMainFramebuffer(out_Framerenderer);
 std::vector&lt;Ref&lt;Framebuffer&gt;&gt; dirSpotPointShadowFBOs = InitShadowMapping(out_Framerenderer);
 InitEditorData(out_Framerenderer);
@@ -166,7 +169,7 @@ InitEnvMapAndSkybox(out_Framerenderer);
 <details>
   <summary>InitMainFramebuffer()</summary>
   <p>Creates the main rendering framebuffer that will be used to display the main viewport. Includes an alternate screen attachment which allows this framebuffer to be used as a ping-pong framebuffer.</p>
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 glm::ivec2 viewportRes = { (glm::ivec2)m_ViewportSize };
 out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;glm::ivec2&gt;&gt;("ViewportResolution", false, viewportRes);
 
@@ -209,7 +212,7 @@ return mainFramebuffer;
 <details>
   <summary>InitShadowMapping()</summary>
   <p>Create shadow map arrays for directional, point and spot light sources as well as importing the appropriate shader files and creating shadow framebuffers.</p>
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
 std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
 
@@ -271,7 +274,7 @@ return { dirLightShadowsFramebuffer, spotLightShadowsFramebuffer, pointLightShad
 <details>
   <summary>InitEditorData()</summary>
   <p>Create a few values related to the debug views in the editor. Note how most of these are serialized, allowing them to be changed in the editor.</p>
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 bool showColliders = true;
 out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;bool&gt;&gt;("ShowColliders", true, showColliders);
 out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;Entity&gt;&gt;("SelectedEntity", false, Entity());
@@ -286,7 +289,7 @@ out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentPrimitiveType&lt;glm::
   <summary>InitBloom()</summary>
   <p>Create all of the resources needed for the mip chain bloom render passes. Earlier in this post I mentioned how custom data types can be used in RenderComponentPrimitiveType templates and cited an example as the BloomMipChain type. This is where that example is used. The mip chain data type was intended to just be a quick and easy way to keep all of the textures together and how they should be sized.</p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 struct BloomMipChain
 {
   void Init(const glm::ivec2 viewportSize, const uint8_t chainLength = 6)
@@ -347,7 +350,7 @@ private:
   The reason the BloomMipChain doesn't use a single texture with actual mipmaps is simply because mipmap generation wasn't actually set up yet in the engine. If I had to guess, writing to mipmaps would probably be more efficient in comparison to fetching and writing to completely unique textures representing different mip levels. This is because, on the CPU side, it requires multiple calls into the asset manager to get texture assets for each mip. And, on the GPU side, I would imagine that the efficiency of the allocated memory would be better when using mips instead of separate textures due to the fact that it would be allocated as a continous block of memory instead of potentially being allocated in fragmented locations.
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
 std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
 
@@ -408,7 +411,7 @@ return bloomFBO;
 <details>
   <summary>InitTonemapping()</summary>
   <p>Simple function to create the tonemapping material.</p>
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
 std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
 
@@ -422,7 +425,7 @@ out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("GammaTon
 <details>
   <summary>InitEnvMapAndSkybox()</summary>
   <p>Import default skybox assets and material.</p>
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 Ref&lt;EditorAssetManager&gt; assetManager = Project::GetActive()-&gt;GetEditorAssetManager();
 std::filesystem::path engineAssetsRelativeToProjectAssets = std::filesystem::path("assets").lexically_relative(Project::GetAssetDirectory());
 
@@ -473,7 +476,7 @@ out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentTexture&gt;("SkyboxTex
           Now that we have some general resources imported and added to the renderer, we create an event function. Right now, the only event that this function listens to is the viewport resize event so that we can resize the appropriate textures and framebuffers:
         </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 // ...
 
 FrameRenderer::OnEventFunc eventFunc = [](Event&amp; e, FrameRenderer* self)
@@ -507,7 +510,7 @@ out_Framerenderer-&gt;SetEventFunc(eventFunc);
           The next step is to import our lighting pass shader and bind the correct g-buffer textures to the material:
         </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 // ...
 
 AssetHandle directLightingPassShaderHandle = assetManager-&gt;ImportAssetFromFile(engineAssetsRelativeToProjectAssets / "shaders/Renderer3D_DirectLightingPass.glsl", true);
@@ -539,7 +542,7 @@ out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("DirectLi
           We then set up more resources for our additional screen space passes. This includes the materials and parameters for screen space ambient occlusion and screen space reflections. These render passes will be used in the IndirectLightingPass shader which can be seen imported here:
         </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 // ...
 
 // code for SSAO and SSR resources
@@ -570,7 +573,7 @@ out_Framerenderer-&gt;AddRenderResource&lt;RenderComponentMaterial&gt;("Indirect
   Let's begin by defining our render function:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   // ...
 };
@@ -580,7 +583,7 @@ RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&a
   The first thing I want to do is clear the framebuffer and make sure the rendering viewport is correct. But to do so, we need our first input: the viewport resolution resource. So now let's define our input specification:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 std::vector&lt;RenderComponentType&gt; geometryPassInputSpec = { RenderComponentType::PrimitiveType };
 </code></pre>
 
@@ -588,7 +591,7 @@ std::vector&lt;RenderComponentType&gt; geometryPassInputSpec = { RenderComponent
   And then, our input binding:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 std::vector&lt;std::string&gt; geometryPassInputBindings = { "ViewportResolution" };
 </code></pre>
 
@@ -596,7 +599,7 @@ std::vector&lt;std::string&gt; geometryPassInputBindings = { "ViewportResolution
   With this input set up, we need to cast our first input into the expected type:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   PE_PROFILE_SCOPE("Geometry Pass");
   Ref&lt;Scene&gt;&amp; sceneContext = context.ActiveScene;
@@ -617,7 +620,7 @@ RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&a
   Anyway, now that we have our input, we can set our viewport and prepare for the main loop:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   // ...
 
@@ -644,7 +647,7 @@ RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&a
   Now it's time for the main logic of this render pass:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   // ...
 
@@ -715,7 +718,7 @@ RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&a
   This render pass, as it stands, will render all of our meshes to our g-buffer framebuffer perfectly fine and we will be able to proceed with our lighting passes with no issue. However, since we skipped all of the meshes that use a forward renderer specific shader, we need to prepare for our additional forward pass. We could just add an extra pass that renders those meshes to the main framebuffer, but the depth buffer would be missing. So, we need to do one last thing:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 std::vector&lt;RenderComponentType&gt; geometryPassInputSpec = { RenderComponentType::PrimitiveType, RenderComponentType::Framebuffer };
 std::vector&lt;std::string&gt; geometryPassInputBindings = { "ViewportResolution", "MainFramebuffer" };
 </code></pre>
@@ -724,7 +727,7 @@ std::vector&lt;std::string&gt; geometryPassInputBindings = { "ViewportResolution
   We add a new input to our render pass: the main framebuffer that will be used by the lighting passes and the additional forward pass.
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   PE_CORE_ASSERT(inputs[0], "Viewport resolution input required");
   PE_CORE_ASSERT(inputs[1], "Main framebuffer input required");
@@ -753,7 +756,7 @@ RenderPass::OnRenderFunc geometryPass3DFunc = [](RenderPass::RenderPassContext&a
   We have all of our geometry data written into the appropriate buffers so now it's time to do some lighting calculations with it. This pass takes more inputs than the previous geometry pass, so I won't go into too much detail on each one, but they are pretty self-explanatory:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 std::vector&lt;RenderComponentType&gt; directLightingInputSpec = { RenderComponentType::PrimitiveType, RenderComponentType::Material, RenderComponentType::PrimitiveType, RenderComponentType::Texture, RenderComponentType::Texture, RenderComponentType::Texture, RenderComponentType::EnvironmentMap };
 std::vector&lt;std::string&gt; directLightingInputBindings = { "ViewportResolution", "DirectLightingPass", "ShadowResolution", "DirLightShadowMap", "SpotLightShadowMap", "PointLightShadowMap", "EnvironmentMap" };
 </code></pre>
@@ -762,7 +765,7 @@ std::vector&lt;std::string&gt; directLightingInputBindings = { "ViewportResoluti
   As you can see, this demonstrates the issue I mentioned before where things can get really messy as the input count grows. Moving to the render function, downcasting each of the inputs and asserting that they exist is... annoying:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   PE_PROFILE_SCOPE("Deferred Direct Lighting Pass");
   Ref&lt;Scene&gt;&amp; sceneContext = context.ActiveScene;
@@ -791,7 +794,7 @@ RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassConte
   Once we have collected our inputs, we clear the current framebuffer (in this case, the main framebuffer) and begin preparing our render. Note that we specifically clear the colour buffers and not the depth buffer, we need to keep the depth buffer intact for our additional forward pass. Since we are only rendering a fullscreen quad, we only need to call SubmitMesh once. However, since this is the lighting pass and the material being used needs light source information, we need to also submit all of our scenes light components.
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
 
   // ...
@@ -870,7 +873,7 @@ RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassConte
   When we submit a light source to the renderer class, it will add the light to a local instance of a uniform buffer. This uniform buffer of lights will be uploaded to the GPU once we call Renderer::EndScene().
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   
   // ...
@@ -931,7 +934,7 @@ RenderPass::OnRenderFunc directLightingPassFunc = [](RenderPass::RenderPassConte
   With pong-pong!
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 RenderPass::OnRenderFunc indirectLightingPassFunc = [](RenderPass::RenderPassContext&amp; context, Ref&lt;Framebuffer&gt; targetFramebuffer, std::vector&lt;IRenderComponent*&gt; inputs) {
   
   // ...
@@ -961,7 +964,7 @@ RenderPass::OnRenderFunc indirectLightingPassFunc = [](RenderPass::RenderPassCon
   As a quick draft, I would imagine the interface for using this type would be something like this:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 // Gaussian Blurr style use
 
 pingPongFBO->BindBackBufferToSlot(0);
@@ -991,7 +994,7 @@ renderImageToViewport(pingPongFBO->GetTopBuffer());
   To give you an idea of how everything flows, here is the list of render passes being added to the frame renderer:
 </p>
 
-<pre><code class="language-cpp"></code>
+<pre><code class="language-cpp">
 // Add render passes
 // -----------------
 
@@ -1033,17 +1036,11 @@ out_Framerenderer->AddRenderPass(RenderPass({ RenderComponentType::PrimitiveType
 
 </section>
   </main>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
-
   <footer>
     <nav class="post-nav">
         <a href="deferred-rendering-and-render-passes-in-paul-engine-solution.html">← Back: Solution</a>
         <a href="deferred-rendering-and-render-passes-in-paul-engine-profiling.html">Next: Profiling →</a>
     </nav>
   </footer>
-
 </body>
 </html>
