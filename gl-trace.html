@@ -25,7 +25,10 @@
         With that inspiration, I went to the <a href="https://raytracing.github.io/" target="_blank">"Ray Tracing in One Weekend" book series.</a> This book series is built as an introduction into the, very deep rabbit hole, topic of ray-traced rendering. In the series, you build a path-tracer that runs offline on the CPU, producing a single frame and saving that image to disk.
       </p>
       <p>
-        I decided I wanted to go a step further. After completing the series, I began this project with the goal of creating a version of the path tracer that runs in real-time on the GPU.
+        I decided I wanted to go a step further. After completing the series, I began this project with the goal of creating a version of the path tracer that runs in real-time on the GPU.0
+      </p>
+      <p>
+        The path tracer runs in a level editor style application, built with ImGui. You can build a scene with various materials and primitive types including: quads, spheres, triangles and disks. The scene you build can be saved and loaded in a JSON format. There is also support for model loading in a very primitive form. Assimp is used to read a model file and automatically create the appropriate scene primitives.
       </p>
     </section>
     
