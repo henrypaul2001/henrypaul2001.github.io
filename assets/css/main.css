@@ -2030,6 +2030,7 @@ input, select, textarea {
 	background-color: #419887;
 	background-size: auto;
 	display: block;
+	padding-bottom: 1.5rem;
 }
 
 	.end h2 {
@@ -2882,6 +2883,7 @@ input, select, textarea {
 		cursor: default;
 		list-style: none;
 		padding-left: 0;
+		margin-bottom: 0;
 	}
 
 		ul.icons li {
@@ -4025,3 +4027,29 @@ input, select, textarea {
 		}
 
 	}
+
+.cv-and-icons {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1em 0 0 1em;
+}
+
+.cv-and-icons .button {
+  margin: 0;
+}
+
+.cv-and-icons .icons {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+@media screen and (max-width: 480px) {
+  .cv-and-icons {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
