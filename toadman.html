@@ -48,13 +48,32 @@
     
     <section>
       <h2>Showcase</h2>
-      <div class="carousel" data-carousel="original">
+      <div class="carousel">
         <video autoplay muted controls loop>
           <source src="videos/toadmn-preview.mp4" type="video/mp4">
         </video>
       </div>
     </section>
 
+    <section>
+      <h3>Samples</h3>
+      <p>Some of the scripts that I wrote can be found at these links:</p>
+      <ul>
+        <li><a href="https://github.com/ReenBean0/Toadm-n/blob/main/Assets/Scripts/GameManager/CameraController.cs" target="_blank">CameraController.cs</a></li>
+        <li><a href="https://github.com/ReenBean0/Toadm-n/blob/main/Assets/Scripts/Toad/TongueController.cs" target="_blank">TongueController.cs</a></li>
+        <li><a href="https://github.com/ReenBean0/Toadm-n/tree/main/Assets/Scripts/ActivatableObjects" target="_blank">ActivatableObjects</a></li>
+      </ul>
+
+      <p>Below are some UML diagrams I drew up for the design of the interactable objects system:</p>
+      <div class="carousel" data-carousel="original">
+        <img src="images/interactable.png" alt="Carousel Image">
+        <div class="carousel-controls">
+          <button>&#10094;</button>
+          <button>&#10095;</button>
+        </div>
+      </div>
+    </section>
+    
     <section>
       <h2>Links</h2>
       <ul>
@@ -69,3 +88,74 @@
   </footer>
 </body>
 </html>
+
+<script>
+class Carousel {
+  constructor(container, images, delay = 10000) {
+    this.container = container;
+    this.images = images;
+    this.index = 0;
+    this.delay = delay;
+
+    this.imgElement = container.querySelector("img");
+    this.prevBtn = container.querySelector("button:first-child");
+    this.nextBtn = container.querySelector("button:last-child");
+
+    this.prevBtn.addEventListener("click", () => {
+      this.showImage(this.index - 1);
+      this.resetTimer();
+    });
+
+    this.nextBtn.addEventListener("click", () => {
+      this.showImage(this.index + 1);
+      this.resetTimer();
+    });
+
+    this.interval = setInterval(() => this.nextImage(), this.delay);
+    this.showImage(0);
+  }
+
+  showImage(i) {
+    const nextIndex = (i + this.images.length) % this.images.length;
+    this.imgElement.classList.add("fade-out");
+
+    setTimeout(() => {
+      this.imgElement.src = this.images[nextIndex].src;
+      this.imgElement.classList.remove("fade-out");
+    }, 300);
+
+    this.index = nextIndex;
+  }
+
+  nextImage() {
+    this.showImage(this.index + 1);
+  }
+
+  resetTimer() {
+    clearInterval(this.interval);
+    this.interval = setInterval(() => this.nextImage(), this.delay);
+  }
+}
+
+// Define separate image sets
+const imageSets = {
+  original: [
+    { src: 'images/interactable.png'},
+    { src: 'images/interactableResponse.png'},
+    { src: 'images/objectResponse.png'}
+  ]
+};
+
+// Initialize carousels based on data attribute
+document.querySelectorAll('.carousel').forEach(carouselEl => {
+  const key = carouselEl.dataset.carousel;
+  const images = imageSets[key] || [];
+
+  let delay = 10000; // default
+  if (key === 'teardown') delay = 30000; // longer interval for teardown
+
+  if (images.length > 0) {
+    new Carousel(carouselEl, images, delay);
+  }
+});
+</script>
